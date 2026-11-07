@@ -149,7 +149,7 @@ case_submit.sh  launchers/   submission (local or sbatch)
 config/run_config.yaml       default configuration
 profiles/ templates/         core definitions and XML templates
 src/                         driver, climate, io, preprocess, case
-params/ static/ data/        empty folders for the files you supply, each with a README listing them
+params/ static/               empty folders for the files you supply, each with a README listing them
 examples/west/               small monthly NetCDF and static files
 tools/scan_core.py
 tables/tem_variables.csv      long names and units of the TEM output variables

@@ -8,5 +8,3 @@ params/*/*
 !params/*/.gitkeep
 static/*
 !static/README.md
-data/*
-!data/README.md
