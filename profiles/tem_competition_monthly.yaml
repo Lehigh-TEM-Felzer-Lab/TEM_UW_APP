@@ -1,0 +1,27 @@
+name: tem_competition_monthly
+description: TEM-Hydro with competing cohorts, monthly time step
+repository: Lehigh-TEM-Felzer-Lab/TEM_Competition-Monthly
+xml_template: tem_competition_monthly.xml             # hvd_tem_hydro.xml of the repository
+time_step: monthly
+exact_coordinates: false
+params: true
+climate_inputs: [tair, dtr, prec, nirr, vpr]
+climate_tags:
+  tair: [itairfname, itairend]
+  dtr: [itrangefname, itrangeend]
+  prec: [iprecfname, iprecend]
+  nirr: [inirrfname, inirrend]
+  vpr: [ivprfname, ivprend]
+  wind: [iws10fname, null]
+  elev: [felev, null]
+static_tags:            # static input -> [XML tag of the file name, XML tag of the extension or null]
+  texture: [fstexture, null]
+  co2: [ico2fname, null]
+  ozone: [io3fname, io3end]
+  ndep: [ndepfname, ndepend]
+  max_cohorts: [imxcohrtfname, imxcohrtend]
+  cohorts: [ilulcfname, ilulcend]
+fire_tag: null
+param_tags: [cmntecd, rootzecd, vegecd, conductecd, mcrbecd, agecd, datfilenames]
+output_tags: {variables: temoutvars, files: temoutfiles, count: ntemout, climate_files: clmoutfiles}
+output_pattern: "{var}.TEMOUT"
