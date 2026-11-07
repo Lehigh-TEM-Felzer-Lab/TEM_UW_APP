@@ -1,4 +1,4 @@
-# tup_xml.py
+# tem_xml.py
 """Fill the XML template of a TEM core: ElementTree keeps the tag order and the comments."""
 
 import xml.etree.ElementTree as ET

@@ -1,21 +1,23 @@
 # driver.py
-"""Create the TEM case of the current directory: INPUT/, HIST/, OUTPUT/, tem_config.xml, tem_in.txt."""
+"""Create the TEM case of the current directory (INPUT/, HIST/, OUTPUT/, tem_config.xml, tem_in.txt),
+or with the argument convert turn HIST/ into the NetCDF files of OUTPUT/."""
 
 import logging
 import os
 import sys
 from pathlib import Path
 
-import tup_case
-import tup_config
-import tup_preprocess
+import tem_case
+import tem_config
+import tem_output_nc
+import tem_preprocess
 
 log = logging.getLogger("DRIVER")
 
 
 def main() -> int:
-    os.environ.setdefault("TUP_ROOT", str(tup_config.ROOT))
-    cfg = tup_config.load()
+    os.environ.setdefault("TUP_ROOT", str(tem_config.ROOT))
+    cfg = tem_config.load()
     case = cfg["case_dir"]
     (case / "logs").mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
@@ -27,7 +29,10 @@ def main() -> int:
         ],
     )
     log.info("Case %s, core %s", cfg["case_name"], cfg["profile"]["name"])
-    tup_case.stage(cfg, tup_preprocess.run(cfg))
+    if "convert" in sys.argv[1:]:
+        tem_output_nc.run(cfg)
+    else:
+        tem_case.stage(cfg, tem_preprocess.run(cfg))
     log.info("Finished %s", Path(case))
     return 0
 

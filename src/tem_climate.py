@@ -1,4 +1,4 @@
-# tup_climate.py
+# tem_climate.py
 """Read the input NetCDF file(s) and convert its variables to TEM inputs (monthly or daily) on the model grid."""
 
 import logging

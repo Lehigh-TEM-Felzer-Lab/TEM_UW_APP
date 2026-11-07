@@ -1,4 +1,4 @@
-# tup_io.py
+# tem_io.py
 """Write the TEM climate, elevation and static CSV files."""
 
 from pathlib import Path

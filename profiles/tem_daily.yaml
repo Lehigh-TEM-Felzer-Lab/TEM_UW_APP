@@ -3,7 +3,6 @@ description: TEM-Hydro, daily time step
 repository: Lehigh-TEM-Felzer-Lab/TEM_Daily
 xml_template: tem_daily.xml          # WLR_daily_new_cal.xml of the repository without its stray closing tag
 time_step: daily                     # daily rows: lon,lat, VAR ,area,year,month,day,value, region; 365 or 366 rows per year
-exact_coordinates: false
 wind_transient: true                 # daily wind series (xtws10flag 1); needs a wind variable with time
 params: true
 climate_inputs: [tair, dtr, prec, nirr, vpr]
@@ -26,7 +25,6 @@ static_tags:            # static input -> [XML tag of the file name, XML tag of 
   cohorts: [ilulcfname, ilulcend]
 co2_daily: true                       # TEM_Daily reads CO2 as daily rows per cell (climate/co2.csv)
 ozone_daily: true                     # long-term monthly AOT40 expanded to one non-leap year of daily rows
-fire_tag: null
 param_tags: [cmntecd, rootzecd, vegecd, conductecd, mcrbecd, agecd, datfilenames]
 output_tags: {variables: temoutvars, files: temoutfiles, count: ntemout, climate_files: clmoutfiles}
 output_pattern: "{var}_dly.WLR"

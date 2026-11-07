@@ -3,3 +3,10 @@
 *.log
 .vscode/
 **/.nfs*
+# user-supplied data
+params/*/*
+!params/*/.gitkeep
+static/*
+!static/README.md
+data/*
+!data/README.md

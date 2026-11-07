@@ -1,4 +1,4 @@
-# tup_config.py
+# tem_config.py
 """Load, merge and validate the TUP run configuration and the TEM core profile."""
 
 import os
@@ -97,20 +97,16 @@ def load() -> dict:
             f"Unknown netcdf_varmap keys {sorted(unknown)}; allowed: {sorted(VARMAP_KEYS)}"
         )
     cfg["profile"] = load_profile(cfg["core"], case_dir)
+    cfg["params_dir"] = cfg["params_dir"] or ROOT / "params" / cfg["profile"]["name"]
+    cfg["static_dir"] = cfg["static_dir"] or ROOT / "static"
     for key, value in cfg.items():
         if is_path_key(key) and key not in STATIC_FILES:
             if isinstance(value, str) and value:
                 cfg[key] = expand(value, case_dir)
             elif isinstance(value, list):
                 cfg[key] = [expand(v, case_dir) for v in value]
-    if cfg["static_dir"] is None and any(
-        k in cfg["profile"].get("static_tags", {}) for k in ("texture", "co2")
-    ):
-        raise ValueError("run_config key 'static_dir' is required")
     for key in STATIC_FILES:
-        cfg[key] = expand(str(cfg[key]), cfg["static_dir"] or case_dir)
-    if cfg["profile"].get("params", True) and cfg["params_dir"] is None:
-        raise ValueError("run_config key 'params_dir' is required")
+        cfg[key] = expand(str(cfg[key]), cfg["static_dir"])
     cfg["case_dir"] = case_dir
     cfg["case_name"] = cfg["case_name"] or case_dir.name
     return cfg

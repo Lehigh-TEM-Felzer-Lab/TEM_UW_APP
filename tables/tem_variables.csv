@@ -1,0 +1,199 @@
+name,group,long_name,units,units_basis
+LEAFC,carbon and nitrogen pools,leaf carbon,g C m-2,convention
+SAPWOODC,carbon and nitrogen pools,sapwood carbon,g C m-2,convention
+HEARTWOODC,carbon and nitrogen pools,heartwood carbon,g C m-2,convention
+ROOTC,carbon and nitrogen pools,root carbon,g C m-2,convention
+SEEDC,carbon and nitrogen pools,seed carbon,g C m-2,convention
+LABILEC,carbon and nitrogen pools,labile carbon,g C m-2,convention
+SOILORGC,carbon and nitrogen pools,soil organic carbon,g C m-2,convention
+LEAFN,carbon and nitrogen pools,leaf nitrogen,g N m-2,convention
+SAPWOODN,carbon and nitrogen pools,sapwood nitrogen,g N m-2,convention
+HEARTWOODN,carbon and nitrogen pools,heartwood nitrogen,g N m-2,convention
+ROOTN,carbon and nitrogen pools,root nitrogen,g N m-2,convention
+SEEDN,carbon and nitrogen pools,seed nitrogen,g N m-2,convention
+LABILEN,carbon and nitrogen pools,labile nitrogen,g N m-2,convention
+SOILORGN,carbon and nitrogen pools,soil organic nitrogen,g N m-2,convention
+AVAILN,carbon and nitrogen pools,available soil nitrogen,g N m-2,convention
+FOZONE,carbon and nitrogen pools,ozone effect scalar on GPP,1,convention
+DOC,carbon and nitrogen pools,dissolved organic carbon,g C m-2,convention
+DON,carbon and nitrogen pools,dissolved organic nitrogen,g N m-2,convention
+SMOIST,water pools,soil moisture,mm,convention
+VSM,water pools,volumetric soil moisture,percent,tem_code
+PCTP,water pools,soil moisture as percent of pore space,percent,tem_code
+RGRNDH2O,water pools,rain-fed ground water,mm,convention
+SGRNDH2O,water pools,snow-melt ground water,mm,convention
+FPC,carbon and nitrogen fluxes,foliage projective cover,,undetermined
+ALLOCLC,carbon and nitrogen fluxes,carbon allocated to leaf,g C m-2 month-1,convention
+ALLOCSC,carbon and nitrogen fluxes,carbon allocated to sapwood,g C m-2 month-1,convention
+ALLOCHC,carbon and nitrogen fluxes,carbon allocated to heartwood,g C m-2 month-1,convention
+ALLOCRC,carbon and nitrogen fluxes,carbon allocated to root,g C m-2 month-1,convention
+ALLOCSEEDC,carbon and nitrogen fluxes,carbon allocated to seed,g C m-2 month-1,convention
+ALLOCILC,carbon and nitrogen fluxes,carbon allocated to leaf (I variant),g C m-2 month-1,convention
+ALLOCISC,carbon and nitrogen fluxes,carbon allocated to sapwood (I variant),g C m-2 month-1,convention
+ALLOCIHC,carbon and nitrogen fluxes,carbon allocated to heartwood (I variant),g C m-2 month-1,convention
+ALLOCIRC,carbon and nitrogen fluxes,carbon allocated to root (I variant),g C m-2 month-1,convention
+ALLOCISEEDC,carbon and nitrogen fluxes,carbon allocated to seed (I variant),g C m-2 month-1,convention
+VEGINGPP,carbon and nitrogen fluxes,gross primary production before nitrogen limitation,g C m-2 month-1,convention
+GPP,carbon and nitrogen fluxes,gross primary production,g C m-2 month-1,convention
+VEGINNPP,carbon and nitrogen fluxes,net primary production before nitrogen limitation,g C m-2 month-1,convention
+NPP,carbon and nitrogen fluxes,net primary production,g C m-2 month-1,convention
+GPR,carbon and nitrogen fluxes,gross plant respiration,g C m-2 month-1,convention
+RVMAINT,carbon and nitrogen fluxes,vegetation maintenance respiration,g C m-2 month-1,convention
+RMLEAF,carbon and nitrogen fluxes,leaf maintenance respiration,g C m-2 month-1,convention
+RMSAPWOOD,carbon and nitrogen fluxes,sapwood maintenance respiration,g C m-2 month-1,convention
+RMROOT,carbon and nitrogen fluxes,root maintenance respiration,g C m-2 month-1,convention
+RMSEED,carbon and nitrogen fluxes,seed maintenance respiration,g C m-2 month-1,convention
+RMLABILE,carbon and nitrogen fluxes,labile maintenance respiration,g C m-2 month-1,convention
+RVGRWTH,carbon and nitrogen fluxes,vegetation growth respiration,g C m-2 month-1,convention
+LTRLC,carbon and nitrogen fluxes,leaf litterfall carbon,g C m-2 month-1,convention
+LTRSC,carbon and nitrogen fluxes,sapwood litterfall carbon,g C m-2 month-1,convention
+LTRHC,carbon and nitrogen fluxes,heartwood litterfall carbon,g C m-2 month-1,convention
+LTRRC,carbon and nitrogen fluxes,root litterfall carbon,g C m-2 month-1,convention
+LTRSEEDC,carbon and nitrogen fluxes,seed litterfall carbon,g C m-2 month-1,convention
+RH,carbon and nitrogen fluxes,heterotrophic respiration,g C m-2 month-1,convention
+ALLOCLN,carbon and nitrogen fluxes,nitrogen allocated to leaf,g N m-2 month-1,convention
+ALLOCSN,carbon and nitrogen fluxes,nitrogen allocated to sapwood,g N m-2 month-1,convention
+ALLOCHN,carbon and nitrogen fluxes,nitrogen allocated to heartwood,g N m-2 month-1,convention
+ALLOCRN,carbon and nitrogen fluxes,nitrogen allocated to root,g N m-2 month-1,convention
+ALLOCSEEDN,carbon and nitrogen fluxes,nitrogen allocated to seed,g N m-2 month-1,convention
+ALLOCILN,carbon and nitrogen fluxes,nitrogen allocated to leaf (I variant),g N m-2 month-1,convention
+ALLOCISN,carbon and nitrogen fluxes,nitrogen allocated to sapwood (I variant),g N m-2 month-1,convention
+ALLOCIHN,carbon and nitrogen fluxes,nitrogen allocated to heartwood (I variant),g N m-2 month-1,convention
+ALLOCIRN,carbon and nitrogen fluxes,nitrogen allocated to root (I variant),g N m-2 month-1,convention
+ALLOCISEEDN,carbon and nitrogen fluxes,nitrogen allocated to seed (I variant),g N m-2 month-1,convention
+NINPUT,carbon and nitrogen fluxes,nitrogen input to the soil,g N m-2 month-1,convention
+AGFERTN,carbon and nitrogen fluxes,agricultural nitrogen fertilizer,g N m-2 month-1,convention
+VEGINNUP,carbon and nitrogen fluxes,vegetation nitrogen uptake before nitrogen limitation,g N m-2 month-1,convention
+VEGNUP,carbon and nitrogen fluxes,vegetation nitrogen uptake,g N m-2 month-1,convention
+NRESORBL,carbon and nitrogen fluxes,leaf nitrogen resorption,g N m-2 month-1,convention
+NRESORBS,carbon and nitrogen fluxes,sapwood nitrogen resorption,g N m-2 month-1,convention
+NRESORBR,carbon and nitrogen fluxes,root nitrogen resorption,g N m-2 month-1,convention
+NRESORBSEED,carbon and nitrogen fluxes,seed nitrogen resorption,g N m-2 month-1,convention
+LTRLN,carbon and nitrogen fluxes,leaf litterfall nitrogen,g N m-2 month-1,convention
+LTRSN,carbon and nitrogen fluxes,sapwood litterfall nitrogen,g N m-2 month-1,convention
+LTRHN,carbon and nitrogen fluxes,heartwood litterfall nitrogen,g N m-2 month-1,convention
+LTRRN,carbon and nitrogen fluxes,root litterfall nitrogen,g N m-2 month-1,convention
+LTRSEEDN,carbon and nitrogen fluxes,seed litterfall nitrogen,g N m-2 month-1,convention
+MICRONUP,carbon and nitrogen fluxes,microbial nitrogen uptake,g N m-2 month-1,convention
+NETNMIN,carbon and nitrogen fluxes,net nitrogen mineralization,g N m-2 month-1,convention
+NLOST,carbon and nitrogen fluxes,nitrogen lost from the ecosystem,g N m-2 month-1,convention
+DOCPROD,carbon and nitrogen fluxes,dissolved organic carbon production,g C m-2 month-1,convention
+LCHDOC,carbon and nitrogen fluxes,dissolved organic carbon leaching,g C m-2 month-1,convention
+DONPROD,carbon and nitrogen fluxes,dissolved organic nitrogen production,g N m-2 month-1,convention
+LCHDON,carbon and nitrogen fluxes,dissolved organic nitrogen leaching,g N m-2 month-1,convention
+NFIXS,carbon and nitrogen fluxes,asymbiotic nitrogen fixation,g N m-2 month-1,convention
+NFIXN,carbon and nitrogen fluxes,symbiotic nitrogen fixation,g N m-2 month-1,convention
+FRDL,carbon and nitrogen fluxes,scalar of rooting depth or light effect on GPP (FRDL),1,convention
+FCO2,carbon and nitrogen fluxes,CO2 effect scalar on GPP,1,convention
+FH2O,carbon and nitrogen fluxes,moisture effect scalar on GPP,1,convention
+TEMP,carbon and nitrogen fluxes,temperature effect scalar on GPP,1,convention
+FO3,carbon and nitrogen fluxes,ozone effect scalar (FO3),1,convention
+LCHDIN,carbon and nitrogen fluxes,dissolved inorganic nitrogen leaching,g N m-2 month-1,convention
+IRRIGATE,water fluxes,irrigation water,mm month-1,convention
+INEET,water fluxes,estimated evapotranspiration before moisture limitation,mm month-1,convention
+EET,water fluxes,estimated evapotranspiration,mm month-1,convention
+RPERC,water fluxes,rain percolation,mm month-1,convention
+SPERC,water fluxes,snow-melt percolation,mm month-1,convention
+RRUN,water fluxes,rain runoff,mm month-1,convention
+SRUN,water fluxes,snow-melt runoff,mm month-1,convention
+GC,water fluxes,canopy conductance,,undetermined
+GS,water fluxes,stomatal conductance,,undetermined
+PECAN,water fluxes,evaporation from the canopy,mm month-1,convention
+PESOIL,water fluxes,evaporation from the soil,mm month-1,convention
+TOTEC,additional variables,total ecosystem carbon,g C m-2,convention
+VEGC,additional variables,vegetation carbon,g C m-2,convention
+VEGN,additional variables,vegetation nitrogen,g N m-2,convention
+SNOWPACK,additional variables,snowpack,mm,convention
+AVAILH2O,additional variables,available soil water,mm,convention
+NEP,additional variables,net ecosystem production,g C m-2 month-1,convention
+NCE,additional variables,net carbon exchange,g C m-2 month-1,convention
+LAI,additional variables,leaf area index,m2 m-2,convention
+PET,additional variables,potential evapotranspiration,mm month-1,convention
+SNOWINF,additional variables,snow-melt infiltration,mm month-1,convention
+H2OYIELD,additional variables,water yield,mm month-1,convention
+AGPRODC,additional variables,AGPRODC,,undetermined
+PROD10C,additional variables,PROD10C,,undetermined
+PROD100C,additional variables,PROD100C,,undetermined
+TOTPRODC,additional variables,TOTPRODC,,undetermined
+RESIDC,additional variables,RESIDC,,undetermined
+CRPSTUBC,additional variables,CRPSTUBC,,undetermined
+AGFPRODN,additional variables,AGFPRODN,,undetermined
+PROD10N,additional variables,PROD10N,,undetermined
+PROD100N,additional variables,PROD100N,,undetermined
+TOTPRODN,additional variables,TOTPRODN,,undetermined
+RESIDN,additional variables,RESIDN,,undetermined
+CRPSTUBN,additional variables,CRPSTUBN,,undetermined
+CONVERTC,additional variables,converted carbon,g C m-2 month-1,convention
+VCONVRTC,additional variables,VCONVRTC,,undetermined
+SCONVRTC,additional variables,SCONVRTC,,undetermined
+SLASHC,additional variables,SLASHC,,undetermined
+CFLUX,additional variables,CFLUX,,undetermined
+CONVERTN,additional variables,converted nitrogen,g N m-2 month-1,convention
+VCONVRTN,additional variables,VCONVRTN,,undetermined
+SCONVRTN,additional variables,SCONVRTN,,undetermined
+SLASHN,additional variables,SLASHN,,undetermined
+NRETENT,additional variables,NRETENT,,undetermined
+NVRETENT,additional variables,NVRETENT,,undetermined
+NSRETENT,additional variables,NSRETENT,,undetermined
+AGFPRODC,additional variables,AGFPRODC,,undetermined
+FRESIDC,additional variables,FRESIDC,,undetermined
+FRESIDN,additional variables,FRESIDN,,undetermined
+AGPRODFC,additional variables,AGPRODFC,,undetermined
+AGPRODFN,additional variables,AGPRODFN,,undetermined
+RESIDFC,additional variables,RESIDFC,,undetermined
+RESIDFN,additional variables,RESIDFN,,undetermined
+PRDF10C,additional variables,PRDF10C,,undetermined
+PRDF10N,additional variables,PRDF10N,,undetermined
+PRD10FC,additional variables,PRD10FC,,undetermined
+PRD10FN,additional variables,PRD10FN,,undetermined
+PRDF100C,additional variables,PRDF100C,,undetermined
+PRDF100N,additional variables,PRDF100N,,undetermined
+PRD100FC,additional variables,PRD100FC,,undetermined
+PRD100FN,additional variables,PRD100FN,,undetermined
+TOTFPRDC,additional variables,TOTFPRDC,,undetermined
+TOTFPRDN,additional variables,TOTFPRDN,,undetermined
+TOTPRDFC,additional variables,TOTPRDFC,,undetermined
+TOTPRDFN,additional variables,TOTPRDFN,,undetermined
+CROPC,additional variables,CROPC,,undetermined
+NATVEGC,additional variables,NATVEGC,,undetermined
+CROPN,additional variables,CROPN,,undetermined
+NATVEGN,additional variables,NATVEGN,,undetermined
+CROPSTRN,additional variables,CROPSTRN,,undetermined
+NATSTRN,additional variables,NATSTRN,,undetermined
+CROPSTON,additional variables,CROPSTON,,undetermined
+NATSTON,additional variables,NATSTON,,undetermined
+CROPLAI,additional variables,CROPLAI,,undetermined
+NATLAI,additional variables,NATLAI,,undetermined
+CROPFPC,additional variables,CROPFPC,,undetermined
+NATFPC,additional variables,NATFPC,,undetermined
+CRPINGPP,additional variables,CRPINGPP,,undetermined
+NATINGPP,additional variables,NATINGPP,,undetermined
+CROPGPP,additional variables,CROPGPP,,undetermined
+NATGPP,additional variables,NATGPP,,undetermined
+CRPINNPP,additional variables,CRPINNPP,,undetermined
+NATINNPP,additional variables,NATINNPP,,undetermined
+CROPNPP,additional variables,CROPNPP,,undetermined
+NATNPP,additional variables,NATNPP,,undetermined
+CROPGPR,additional variables,CROPGPR,,undetermined
+NATGPR,additional variables,NATGPR,,undetermined
+CRPRMNT,additional variables,CRPRMNT,,undetermined
+NATRVMNT,additional variables,NATRVMNT,,undetermined
+CRPRGRW,additional variables,CRPRGRW,,undetermined
+NATRGRW,additional variables,NATRGRW,,undetermined
+CROPLTRC,additional variables,CROPLTRC,,undetermined
+NATLTRC,additional variables,NATLTRC,,undetermined
+CRPINNUP,additional variables,CRPINNUP,,undetermined
+NATINNUP,additional variables,NATINNUP,,undetermined
+CROPNUP,additional variables,CROPNUP,,undetermined
+NATVNUP,additional variables,NATVNUP,,undetermined
+CRPNMOBL,additional variables,CRPNMOBL,,undetermined
+NATVNMBL,additional variables,NATVNMBL,,undetermined
+CRPNRSRB,additional variables,CRPNRSRB,,undetermined
+NVNRSRB,additional variables,NVNRSRB,,undetermined
+CROPLTRN,additional variables,CROPLTRN,,undetermined
+NATLTRN,additional variables,NATLTRN,,undetermined
+CLIPPINGS,additional variables,CLIPPINGS,,undetermined
+STANDDEADC,additional variables,STANDDEADC,,undetermined
+STANDDEADN,additional variables,STANDDEADN,,undetermined
+VOLAC,additional variables,volatilized carbon,g C m-2 month-1,convention
+VOLAN,additional variables,volatilized nitrogen,g N m-2 month-1,convention

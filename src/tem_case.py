@@ -1,10 +1,10 @@
-# tup_case.py
+# tem_case.py
 """Create the case directory: INPUT/params, HIST/, OUTPUT/, logs/, the XML and tem_in.txt."""
 
 import logging
 from pathlib import Path
 
-import tup_xml
+import tem_xml
 
 log = logging.getLogger("CASE")
 XML_NAME = "tem_config.xml"
@@ -12,7 +12,7 @@ YEAR_TAGS = ("clmstartyr", "de_startyear", "startyr")
 
 
 def file_values(template: Path, name: str) -> list[str]:
-    return [v.strip() for v in tup_xml.text(template, name).split(",") if v.strip()]
+    return [v.strip() for v in tem_xml.text(template, name).split(",") if v.strip()]
 
 
 def param_tags(cfg: dict) -> dict[str, str]:
@@ -81,7 +81,7 @@ def stage(cfg: dict, input_tags: dict[str, str]) -> None:
     link = case / "INPUT" / "params"
     link.unlink(missing_ok=True)
     link.symlink_to(cfg["params_dir"].resolve())
-    xml = tup_xml.render(cfg["profile"]["xml_template"], tags(cfg, input_tags))
+    xml = tem_xml.render(cfg["profile"]["xml_template"], tags(cfg, input_tags))
     (case / XML_NAME).write_text(xml)
     (case / "tem_in.txt").write_text(f"{XML_NAME}\n")
     log.info("Created %s for the %s core", case, cfg["profile"]["name"])

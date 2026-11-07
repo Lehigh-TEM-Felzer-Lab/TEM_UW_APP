@@ -1,5 +1,5 @@
-# tup_preprocess.py
-"""Preprocess NetCDF climate, fire and static data into the CSV files read by a TEM core."""
+# tem_preprocess.py
+"""Preprocess NetCDF climate and static data into the CSV files read by a TEM core."""
 
 import filecmp
 import logging
@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-import tup_climate as clim
-from tup_io import (
+import tem_climate as clim
+from tem_io import (
     link,
     subset_csv,
     write_daily_csv,
@@ -55,13 +55,6 @@ def candidate_cells(cfg: dict) -> pd.DataFrame:
             "Cell area is %d km2 at the smallest: TEM reads the area as an integer",
             cells["area"].min(),
         )
-    if cfg["profile"].get("exact_coordinates"):
-        # TEM matches fire records on exact float coordinates
-        coords = cells[["lon", "lat"]]
-        if not (coords.astype("float32").astype(float) == coords).all().all():
-            raise ValueError(
-                "This core needs grid coordinates that are exact binary fractions (multiples of 0.25 degrees)"
-            )
     return cells
 
 
@@ -98,33 +91,6 @@ def check_complete(da: xr.DataArray, name: str) -> None:
         raise ValueError(f"{name}: {missing} cells have missing data after regridding")
 
 
-def fire_csv(cfg: dict, cells: pd.DataFrame, path: Path) -> bool:
-    """Translate the fire NetCDF to the TEM fire CSV. False when no fire data are available."""
-    source = cfg["fire_file"]
-    if not source or not Path(source).is_file():
-        log.warning("Fire file '%s' not found: TEM runs without fires", source)
-        return False
-    ds = xr.open_dataset(source)
-    ds = ds.rename({k: v for k, v in clim.RENAME.items() if k in ds.dims})
-    res = cfg["resolution"]
-    lon, lat = (
-        xr.DataArray(cells["lon"].values, dims="cell"),
-        xr.DataArray(cells["lat"].values, dims="cell"),
-    )
-    pick_ = {"lon": lon, "lat": lat, "method": "nearest", "tolerance": max(res, 0.5)}
-    flashes = ds[cfg["fire_lightning"]].sel(**pick_).fillna(0.0).load()
-    people = ds[cfg["fire_population"]].sel(**pick_).fillna(0.0).load()
-    months = flashes.time.dt.month.values
-    with path.open("w") as out:
-        for i, cell in enumerate(cells.itertuples()):
-            for j, month in enumerate(months):
-                out.write(
-                    f"{cell.lon:.6g},{cell.lat:.6g},{month},{int(cell.area)},"
-                    f"{people.values[i]:.6g},{flashes.values[j, i]:.6g}\n"
-                )
-    return True
-
-
 def file_tags(spec: list, directory: str, filename: str, tags: dict[str, str]) -> None:
     """XML tags of a file: a complete name, or a name without extension plus the extension tag."""
     name_tag, end_tag = spec
@@ -153,6 +119,11 @@ def run(cfg: dict) -> dict[str, str]:
         cfg["lat_max"] + pad,
     )
     y0, y1 = cfg["start_year"], cfg["end_year"]
+    if y1 - y0 + 1 < 40:
+        log.warning(
+            "Only %d transient years: the cores equilibrate over 40 years from start_year and a 10-year run returned NaN",
+            y1 - y0 + 1,
+        )
     tags: dict[str, str] = {}
     ds = clim.open_dataset(
         cfg["netcdf_input_file"], bbox, cfg["netcdf_input_frequency"]
@@ -233,14 +204,6 @@ def run(cfg: dict) -> dict[str, str]:
                 subset.replace(target)
         file_tags(spec, "static", fname, tags)
 
-    if profile.get("fire_tag"):
-        tags[profile["fire_tag"]] = (
-            "./INPUT/static/fire.csv"
-            if fire_csv(cfg, cells, static_out / "fire.csv")
-            else "missing"
-        )
-    elif cfg["fire_file"]:
-        log.warning("fire_file is ignored: the core %s has no fire module", cfg["core"])
     tags["mxnumgrid"] = str(len(cells))
     log.info("Wrote %s inputs for %d cells to %s", step, len(cells), case_input)
     return tags

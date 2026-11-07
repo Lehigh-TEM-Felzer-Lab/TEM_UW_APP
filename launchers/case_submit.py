@@ -34,19 +34,19 @@ from pathlib import Path
 ROOT = Path(os.environ.get("TUP_ROOT", Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(ROOT / "src"))
 
-import tup_config
+import tem_config
 
 
 def main() -> int:
     case_dir = Path.cwd()
-    if not (case_dir / tup_config.CASE_FILE).exists():
+    if not (case_dir / tem_config.CASE_FILE).exists():
         sys.exit(
-            f"{tup_config.CASE_FILE} not found in {case_dir}; run case_submit.sh from the case directory"
+            f"{tem_config.CASE_FILE} not found in {case_dir}; run case_submit.sh from the case directory"
         )
     try:
-        cfg = tup_config.load()
+        cfg = tem_config.load()
     except (KeyError, ValueError, FileNotFoundError) as error:
-        sys.exit(f"Invalid {tup_config.CASE_FILE}: {error}")
+        sys.exit(f"Invalid {tem_config.CASE_FILE}: {error}")
 
     env = {**os.environ, "TUP_ROOT": str(ROOT), "TUP_MODULES": " ".join(cfg["modules"])}
     if cfg["run_mode"] == "local":

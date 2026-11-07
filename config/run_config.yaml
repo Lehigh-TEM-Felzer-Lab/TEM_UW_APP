@@ -13,7 +13,7 @@
 #   1. TEM core
 #   2. Grid and time
 #   3. NetCDF input file and variable map
-#   4. Static inputs and fire
+#   4. Static inputs
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -34,12 +34,13 @@ sbatch_options: "" # Extra sbatch flags, for example "--mail-type=END"
 # -----------------------------------------------------------------------------
 # core selects the profile in profiles/ that describes the TEM core you will run:
 # its climate file layout (monthly rows or daily rows), XML template and tag names.
-# Give a profile name (tem_biogeography, tem_monthly, tem_competition_monthly,
+# Give a profile name (tem_monthly, tem_competition_monthly,
 # tem_daily) or the path of your own profile YAML for a core that is not listed.
 
 core: null # Profile name or path to a profile YAML (REQUIRED)
-params_dir: null # Directory with the .ecd and .dat files the XML names (REQUIRED); linked to INPUT/params
+params_dir: null # Directory with the .ecd and .dat files the XML names; null uses $TUP_ROOT/params/<core>; linked to INPUT/params
 tem: # Any XML tag to set; replaces the value of the template
+keep_hist: false # case_convert.sh deletes HIST/ after the NetCDF files are written unless true
 tem_outputs: null # TEM output variables (list); null keeps the list of the XML template
 
 # -----------------------------------------------------------------------------
@@ -84,20 +85,17 @@ netcdf_varmap:
 surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in netcdf_varmap
 
 # -----------------------------------------------------------------------------
-# 4. STATIC INPUTS AND FIRE
+# 4. STATIC INPUTS
 # -----------------------------------------------------------------------------
 # TEM files of the domain. Relative names are taken in static_dir. The per-cell CSV
 # files must cover every cell of the grid (more cells are allowed); the cells of the
 # grid are written to INPUT/static/ (or the file is linked when it already matches).
 # Only the files the profile uses are read.
 
-static_dir: null # Directory with the static files of the domain
+static_dir: null # Directory with the static files of the domain; null uses $TUP_ROOT/static
 texture_file: texture.csv # Soil texture
 ozone_file: ozone.csv # AOT40
 ndep_file: ndep.csv # Nitrogen deposition
 co2_file: co2.data # Atmospheric CO2 by year
 max_cohorts_file: mxcohort.csv # Maximum number of cohorts per cell
 cohorts_file: cohort.csv # Land cover cohorts
-fire_file: "" # NetCDF with lightning and population (profiles with fire only); empty or missing disables fires
-fire_lightning: lightning_flashes # Monthly lightning variable of fire_file
-fire_population: population_density # Population variable of fire_file

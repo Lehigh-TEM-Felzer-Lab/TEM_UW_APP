@@ -8,4 +8,4 @@ if [ -n "${TUP_MODULES:-}" ]; then
     for module in $TUP_MODULES; do module load "$module"; done
 fi
 
-exec python "$TUP_ROOT/src/driver.py"
+exec python "$TUP_ROOT/src/driver.py" "$@"
