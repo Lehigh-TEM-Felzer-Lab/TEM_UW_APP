@@ -1,4 +1,4 @@
-# TUP: TEM Unified Preprocessor
+# TUP: TEM Unified Workflow
 
 A configuration-driven preprocessor for the Terrestrial Ecosystem Model (TEM). It reads
 NetCDF climate (one file, a glob or a list) and a YAML file, and builds the case directory
