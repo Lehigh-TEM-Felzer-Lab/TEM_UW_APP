@@ -11,11 +11,11 @@ workflow is not supported; the last version of it is the commit before this one.
 conda env create -f env.yaml && conda activate tup
 export TUP_ROOT=$PWD
 mkdir -p ~/cases/west && cd ~/cases/west
-cp $TUP_ROOT/examples/west/run_config.yaml .     # set tem2026_dir
+cp $TUP_ROOT/examples/west/run_config.yaml .     # set tem_src, the climate file and the grid
 $TUP_ROOT/case_submit.sh
 ```
 
-TEM_2026 must be built first (`cmake -S . -B build && cmake --build build -j`, add `-DUSE_MPI=ON` for `mpi_tasks > 1`).
+TEM_2026 must be built first (`cmake -S . -B build && cmake --build build -j`, add `-DUSE_MPI=ON` for `n_cpus > 1`).
 `run_mode: slurm` submits with sbatch; `run_model: false` only builds the case.
 
 ## Configuration
@@ -25,14 +25,16 @@ are an error. The main ones:
 
 | Key | Meaning |
 |---|---|
-| `tem2026_dir` | TEM_2026 checkout: template `tem_config.yaml`, `params/`, `build/xtem` |
-| `netcdf_input_file`, `netcdf_input_frequency`, `netcdf_varmap` | climate files (path, glob or list), time step (hourly, daily or monthly) and the variable for each of tair, dtr, prec, nirr, vpr, wind, elev |
+| `tem_src`, `tem_exe` | TEM_2026 checkout (template `tem_config.yaml`, `params/`) and the executable (default `{tem_src}/build/xtem`) |
+| `netcdf_climate_in_file`, `netcdf_climate_in_frequency` | climate files (path, glob or list) and their time step (hourly, daily or monthly) |
+| `netcdf_static_in_file`, `netcdf_lulc_in_file`, `netcdf_co2_in_file` | NetCDF files in the layout of TEM_2026 `docs/data.md` |
+| `netcdf_fire_in_file`, `netcdf_population_in_file` | lightning flashes and population density, needed when `veg_fire: 1` |
+| `varmap` | flat map `<model variable>: <variable in your files>`; the model name is used first, the map only when the file lacks it |
 | `horizontal_resolution`, `lon_min`..`lat_max`, `regrid_method` | model grid and how inputs are regridded (`box_mean`, `bilinear`, `nearest`) |
-| `static_file`, `lulc_file`, `co2_file` | NetCDF files in the layout of TEM_2026 `docs/data.md` |
-| `tem` | any `tem_config.yaml` key, for example `veg_fire: 1`, `fire_mode: 1`, `fire_topography: 1`, `xnfertflag: 1`, `xtws10flag: 1` |
-| `tem_varmap` | variable names in your files where they differ from TEM_2026 |
-| `fire` | `flashes_file` and `popdens_file`, two NetCDF files, used when `veg_fire: 1` |
-| `mpi_tasks` | processes; the cells are shared between them and the output is merged into one file |
+| `spinflag`, `veg_fire`, `fire_mode`, `xnfertflag`, ... | the `tem_config.yaml` options, each as its own key (section 5 of `run_config.yaml`) |
+| `cmntecd`, `vegecd`, ... | parameter files, by default `{tem_src}/params/biogeography/` |
+| `clmoutvars`, `temoutvars` | variables written to `OUTPUT/tem.nc` |
+| `run_mode`, `n_nodes`, `n_cpus`, `walltime`, `partition`, `mem`, `sbatch_options`, ... | sbatch settings as in pyUFS; the cells are shared between the `n_cpus` MPI tasks and the output is merged into one file |
 
 Climate units are read from the `units` attribute and converted (K, degC, rates or amounts, J m-2, Pa, ...). `tmin`/`tmax` can
 replace `tair`/`dtr`, and `dewpoint` or `huss` can replace `vpr`. Daily and hourly data are averaged to months.

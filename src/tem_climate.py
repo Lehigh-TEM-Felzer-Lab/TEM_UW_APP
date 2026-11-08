@@ -37,7 +37,7 @@ def open_dataset(
     )
     if not paths:
         raise FileNotFoundError(
-            f"No file matches netcdf_input_file: {[str(p) for p in (path if isinstance(path, list) else [path])]}"
+            f"No file matches netcdf_climate_in_file: {[str(p) for p in (path if isinstance(path, list) else [path])]}"
         )
     log.info("Reading %d input file(s)", len(paths))
     ds = xr.open_mfdataset(paths, combine="by_coords", chunks={})
@@ -56,14 +56,12 @@ def open_dataset(
 
 
 def get(ds: xr.Dataset, varmap: dict, key: str) -> xr.DataArray | None:
-    """Variable of the input file that netcdf_varmap assigns to key, or None if key is not mapped."""
+    """Variable of the input file that varmap assigns to key, or None if key is not mapped."""
     if key not in varmap:
         return None
     name = varmap[key]
     if name not in ds:
-        raise KeyError(
-            f"netcdf_varmap: '{name}' (TEM input '{key}') is not in the input file"
-        )
+        raise KeyError(f"varmap: '{name}' (TEM input '{key}') is not in the input file")
     if "units" not in ds[name].attrs:
         raise ValueError(f"Input variable '{name}' has no 'units' attribute")
     return ds[name]
@@ -123,7 +121,7 @@ def radiation(da: xr.DataArray, frequency: str) -> xr.DataArray:
 def derive(
     name: str, ds: xr.Dataset, varmap: dict, frequency: str, surface_pressure_hpa: float
 ) -> xr.DataArray | None:
-    """TEM variable name in TEM units on the file's native time step, or None if netcdf_varmap lacks it."""
+    """TEM variable name in TEM units on the file's native time step, or None if varmap lacks it."""
 
     def has(*keys: str) -> bool:
         return all(k in varmap for k in keys)

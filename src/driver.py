@@ -3,9 +3,9 @@
 
 import logging
 import re
-import shutil
 import subprocess
 import sys
+from glob import glob
 from pathlib import Path
 
 import numpy as np
@@ -32,21 +32,30 @@ NEAREST = {
     "agstate",
     "agprevstate",
 }
-FILE_KEYS = {  # tem_config.yaml key: file in INPUT/
-    "inirrfname": "climate.nc",
-    "itairfname": "climate.nc",
-    "iprecfname": "climate.nc",
-    "itrangefname": "climate.nc",
-    "ivprfname": "climate.nc",
-    "ico2fname": "co2.nc",
-    "io3fname": "static.nc",
-    "ndepfname": "static.nc",
-    "iws10fname": "static.nc",
-    "imxcohrtfname": "static.nc",
-    "fstexture": "static.nc",
-    "felev": "static.nc",
-    "ilulcfname": "lulc.nc",
+INT_FILL = -9999
+INT_VARS = NEAREST - {"lulc", "chrtarea"} | {
+    "tillflag",
+    "fertflag",
+    "irrgflag",
+    "disturbflag",
+    "disturbmonth",
 }
+
+
+def save(ds: xr.Dataset, path: Path) -> set[str]:
+    """Write with float32 for floats (coordinates too) and int64 for the categorical fields."""
+    enc = {}
+    for k in ds.data_vars:
+        if k in INT_VARS:
+            ds[k] = ds[k].fillna(INT_FILL).astype("int64")
+            enc[k] = {"_FillValue": np.int64(INT_FILL)}
+        elif ds[k].dtype.kind == "f":
+            ds[k] = ds[k].astype("float32")
+    ds = ds.assign_coords(
+        {k: ds[k].astype("float32") for k in ("lat", "lon") if k in ds.coords}
+    )
+    ds.to_netcdf(path, encoding=enc)
+    return set(ds.data_vars)
 
 
 def grid(cfg: dict) -> tuple[np.ndarray, np.ndarray]:
@@ -54,6 +63,21 @@ def grid(cfg: dict) -> tuple[np.ndarray, np.ndarray]:
     lon = np.arange(cfg["lon_min"], cfg["lon_max"] + res / 2, res).round(4)
     lat = np.arange(cfg["lat_min"], cfg["lat_max"] + res / 2, res).round(4)
     return lon, lat
+
+
+def files(paths: list[Path]) -> list[str]:
+    """The files that the paths and globs match."""
+    found = sorted({f for p in paths for f in glob(str(p))})
+    if not found:
+        raise FileNotFoundError(f"No file matches {[str(p) for p in paths]}")
+    return found
+
+
+def merged(
+    paths: list[Path], cfg: dict, lon: np.ndarray, lat: np.ndarray
+) -> xr.Dataset:
+    """The regridded variables of all the files."""
+    return xr.merge([regrid_file(f, cfg, lon, lat) for f in files(paths)])
 
 
 def regrid_file(path: Path, cfg: dict, lon: np.ndarray, lat: np.ndarray) -> xr.Dataset:
@@ -78,27 +102,27 @@ def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, di
     res, y0, y1 = cfg["horizontal_resolution"], cfg["start_year"], cfg["end_year"]
     pad = max(2.0, 2 * res)
     ds = clim.open_dataset(
-        cfg["netcdf_input_file"],
+        cfg["netcdf_climate_in_file"],
         (lon[0] - pad, lon[-1] + pad, lat[0] - pad, lat[-1] + pad),
-        cfg["netcdf_input_frequency"],
+        cfg["netcdf_climate_in_frequency"],
     )
     fields = {}
     for name in [*CLIMATE, "wind", "elev"]:
         da = clim.derive(
             name,
             ds,
-            cfg["netcdf_varmap"],
-            cfg["netcdf_input_frequency"],
+            cfg["varmap"],
+            cfg["netcdf_climate_in_frequency"],
             cfg["surface_pressure_hpa"],
         )
         if da is None:
             if name in CLIMATE:
                 raise ValueError(
-                    f"netcdf_varmap cannot supply '{name}' (see config/run_config.yaml)"
+                    f"varmap cannot supply '{name}' (see config/run_config.yaml)"
                 )
             continue
         if name in CLIMATE or (name == "wind" and "time" in da.dims):
-            da = clim.monthly(da, name, cfg["netcdf_input_frequency"])
+            da = clim.monthly(da, name, cfg["netcdf_climate_in_frequency"])
         if name == "wind" and "time" in da.dims:
             da = da.groupby("time.month").mean()
         elif "time" in da.dims:
@@ -125,14 +149,13 @@ def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, di
 MIDMONTH = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]
 
 
-def write_config(cfg: dict, written: set[str]) -> None:
-    """tem_config.yaml from the TEM_2026 template: years, file names, parameter paths, varmap, overrides."""
-    root = cfg["tem2026_dir"]
-    text = (root / "templates" / "tem_config.yaml").read_text()
+def write_config(cfg: dict, present: set[str]) -> None:
+    """tem_config.yaml from the TEM_2026 template: the keys of run_config.yaml that it has, the years and the varmap."""
+    text = (cfg["tem_src"] / "templates" / "tem_config.yaml").read_text()
     y0, y1 = cfg["start_year"], cfg["end_year"]
     lon, lat = grid(cfg)
-    values = {
-        "region": cfg["region"],
+    values = {k: v for k, v in cfg.items() if k not in tem_config.APP_KEYS}
+    values |= {
         "clmstartyr": y0,
         "de_startyear": y0,
         "startyr": y0,
@@ -140,14 +163,19 @@ def write_config(cfg: dict, written: set[str]) -> None:
         "transtime": y1 - y0 + 1,
         "lulclastyr": y1,
         "mxnumgrid": lon.size * lat.size,
-        **{k: f"./INPUT/{f}" for k, f in FILE_KEYS.items() if f in written},
-        **cfg["tem"],
+        "clmoutflag": int(bool(cfg["clmoutvars"])),
+        "nclmout": len(cfg["clmoutvars"]),
+        "clmoutvars": ",".join(cfg["clmoutvars"]) or "missing",
+        "temoutflag": int(bool(cfg["temoutvars"])),
+        "ntemout": len(cfg["temoutvars"]),
+        "temoutvars": ",".join(cfg["temoutvars"]) or "missing",
+        "netcdf_climate_in_file": "./INPUT/climate.nc",
+        "netcdf_static_in_file": "./INPUT/static.nc",
+        "netcdf_lulc_in_file": "./INPUT/lulc.nc",
+        "netcdf_co2_in_file": "./INPUT/co2.nc",
+        "netcdf_fire_in_file": "./INPUT/lightning.nc",
+        "netcdf_population_in_file": "./INPUT/population.nc",
     }
-    if cfg["tem"].get("veg_fire"):
-        values |= {
-            "flashfname": "./INPUT/lightning.nc",
-            "popdensfname": "./INPUT/population.nc",
-        }
     for key, value in values.items():
         text, n = re.subn(
             rf"^{key}:.*$",
@@ -156,53 +184,50 @@ def write_config(cfg: dict, written: set[str]) -> None:
             flags=re.MULTILINE,
         )
         if n != 1:
-            raise KeyError(f"tem_config.yaml of {root} has no key '{key}'")
-    text = text.replace("../../params/", f"{root}/params/")
-    for key, name in cfg["tem_varmap"].items():
-        text, n = re.subn(
-            rf"^  {key}:.*$", f"  {key}: {name}", text, flags=re.MULTILINE
-        )
-        if n != 1:
-            raise KeyError(f"varmap of tem_config.yaml has no key '{key}'")
+            raise KeyError(f"tem_config.yaml of {cfg['tem_src']} has no key '{key}'")
+    # model variables the app passes on: those whose variable is in a file it wrote
+    varmap = "".join(
+        f"\n  {k}: {v}"
+        for k, v in cfg["varmap"].items()
+        if k in tem_config.MODEL_KEYS and v.split("+")[0].split("[")[0] in present
+    )
+    text = re.sub(
+        r"^varmap:.*$",
+        lambda _: f"varmap:{varmap}" if varmap else "varmap: {}",
+        text,
+        flags=re.MULTILINE,
+    )
     (cfg["case_dir"] / "tem_config.yaml").write_text(text)
 
 
 def build(cfg: dict) -> None:
     case = cfg["case_dir"]
-    for sub in ("INPUT", "OUTPUT", "logs"):
+    for sub in ("INPUT", "OUTPUT"):
         (case / sub).mkdir(parents=True, exist_ok=True)
     lon, lat = grid(cfg)
-    written = {"climate.nc"}
     clim_ds, extra = climate(cfg, lon, lat)
-    clim_ds.to_netcdf(case / "INPUT" / "climate.nc")
+    present = save(clim_ds, case / "INPUT" / "climate.nc")
     static = (
-        regrid_file(cfg["static_file"], cfg, lon, lat)
-        if cfg["static_file"]
+        merged(cfg["netcdf_static_in_file"], cfg, lon, lat)
+        if cfg["netcdf_static_in_file"]
         else xr.Dataset()
     )
     for name, da in extra.items():
         if name not in static:
             static[name] = da.assign_attrs(units="m s-1" if name == "wind" else "m")
     if static.data_vars:
-        static.to_netcdf(case / "INPUT" / "static.nc")
-        written.add("static.nc")
-    if cfg["lulc_file"]:
-        regrid_file(cfg["lulc_file"], cfg, lon, lat).to_netcdf(
-            case / "INPUT" / "lulc.nc"
-        )
-        written.add("lulc.nc")
-    if cfg["co2_file"]:
-        shutil.copy(cfg["co2_file"], case / "INPUT" / "co2.nc")
-        written.add("co2.nc")
-    if cfg["tem"].get("veg_fire"):
-        for key, name in (
-            ("flashes_file", "lightning.nc"),
-            ("popdens_file", "population.nc"),
-        ):
-            regrid_file(cfg["fire"][key], cfg, lon, lat).to_netcdf(
-                case / "INPUT" / name
-            )
-    write_config(cfg, written)
+        present |= save(static, case / "INPUT" / "static.nc")
+    for key, name in (
+        ("netcdf_lulc_in_file", "lulc.nc"),
+        ("netcdf_fire_in_file", "lightning.nc"),
+        ("netcdf_population_in_file", "population.nc"),
+    ):
+        if cfg[key]:
+            present |= save(merged(cfg[key], cfg, lon, lat), case / "INPUT" / name)
+    if cfg["netcdf_co2_in_file"]:
+        co2 = xr.open_mfdataset(files(cfg["netcdf_co2_in_file"]), combine="by_coords")
+        present |= save(co2.load(), case / "INPUT" / "co2.nc")
+    write_config(cfg, present)
     log.info(
         "Built %s: %d x %d cells of %g degrees",
         case,
@@ -214,8 +239,9 @@ def build(cfg: dict) -> None:
 
 def run(cfg: dict) -> int:
     cmd = [str(cfg["tem_exe"])]
-    if cfg["mpi_tasks"] > 1:
-        cmd = ["mpirun", "-n", str(cfg["mpi_tasks"]), *cmd]
+    tasks = cfg["n_cpus"] // cfg["n_nodes"] * cfg["n_nodes"]
+    if tasks > 1:
+        cmd = ["mpirun", "-n", str(tasks), *cmd]
     log.info("Running %s", " ".join(cmd))
     with open(cfg["case_dir"] / "logs" / "tem.out", "w") as out:
         return subprocess.run(
@@ -231,7 +257,7 @@ def main() -> int:
         format="%(asctime)s %(name)s %(message)s",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(cfg["case_dir"] / "logs" / "tup.log"),
+            logging.FileHandler(cfg["case_dir"] / f"{cfg['logfile']}.log"),
         ],
     )
     build(cfg)

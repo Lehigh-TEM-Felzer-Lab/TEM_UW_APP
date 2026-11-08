@@ -1,33 +1,32 @@
 # Western USA example: monthly CCSM4 RCP8.5 climate 2015-2099 on a 0.5 degree grid.
-# Copy to an empty directory, set tem2026_dir, run case_submit.sh from there.
-tem2026_dir: /path/to/TEM_2026 # checkout built with cmake (build/xtem)
-netcdf_input_file: $TUP_ROOT/examples/west/climate_ccsm4_rcp85.nc
-netcdf_input_frequency: monthly
-netcdf_varmap: {tair: tair, dtr: dtr, prec: prec, nirr: nirr, vpr: vpr, wind: wind, elev: elev}
-static_file: $TUP_ROOT/examples/west/static.nc
-lulc_file: $TUP_ROOT/examples/west/lulc.nc
-co2_file: $TUP_ROOT/examples/west/co2.nc
+# Copy to an empty directory, set tem_src, run case_submit.sh from there.
+tem_src: /path/to/TEM_2026 # checkout built with cmake (build/xtem)
+region: WESTERN_USA
+
 horizontal_resolution: 0.5
 lon_min: -124.5
 lon_max: -123.5
 lat_min: 40.0
 lat_max: 43.0
-region: WESTERN_USA
 start_year: 2015
 end_year: 2099
-tem: # keys of tem_config.yaml; the others keep the TEM_2026 template values
-  de_nyears: 40
-  grdcnt: 1
-  initco2: 303.0
-  xco2level: 303.0
-  ctol: 5.0
-  ntol: 1.0
-  equil_max_years: 10000
-  nclmout: 1
-  clmoutvars: TAIR
-  ntemout: 1
-  temoutvars: GPP
-  istateyear: 0
-  ostateflag: 1
-  ostatefile: ./OUTPUT/state_eq.nc
-  ostateyear: 1997
+
+netcdf_climate_in_file: $TUP_ROOT/examples/west/climate_ccsm4_rcp85.nc
+netcdf_climate_in_frequency: monthly
+netcdf_static_in_file: $TUP_ROOT/examples/west/static.nc
+netcdf_lulc_in_file: $TUP_ROOT/examples/west/lulc.nc
+netcdf_co2_in_file: $TUP_ROOT/examples/west/co2.nc
+varmap: {tair: tair, dtr: dtr, prec: prec, nirr: nirr, vpr: vpr, wind: wind, elev: elev}
+
+de_nyears: 40
+initco2: 303.0
+xco2level: 303.0
+ctol: 5.0
+ntol: 1.0
+equil_max_years: 10000
+
+clmoutvars: [tair]
+temoutvars: [gpp]
+ostateflag: 1
+ostatefile: ./OUTPUT/state_eq.nc
+ostateyear: 1997
