@@ -24,7 +24,7 @@
 # -----------------------------------------------------------------------------
 
 tem_src: null # TEM_2026 checkout: templates/tem_config.yaml, params/ and the build (REQUIRED)
-tem_exe: "{tem_src}/build/xtem" # Executable built with cmake (xtem_competition for cohort competition); add -DUSE_MPI=ON to run on more than one task
+tem_exe: "{tem_src}/build/xtem" # Executable built with make (build/xtem_competition for cohort competition); for n_cpus > 1 use the MPI build, {tem_src}/build_mpi/xtem
 modules: [] # Modules loaded before the run (the libraries the executable was built with)
 
 # -----------------------------------------------------------------------------

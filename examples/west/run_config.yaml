@@ -1,6 +1,6 @@
 # Western USA example: monthly CCSM4 RCP8.5 climate 2015-2099 on a 0.5 degree grid.
 # Copy to an empty directory, set tem_src, run case_submit.sh from there.
-tem_src: /path/to/TEM_2026 # checkout built with cmake (build/xtem)
+tem_src: /path/to/TEM_2026 # checkout built with make (build/xtem)
 region: WESTERN_USA
 
 horizontal_resolution: 0.5
