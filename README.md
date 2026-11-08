@@ -70,7 +70,7 @@ The app builds `climate.nc` from your climate files, which `src/gen_climate_inpu
 A="--out INPUT --cache downloads --bbox -125 -110 32 49 --res 0.5"
 python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000 --end 2019 gridmet
 python src/gen_static_inputs.py $A co2 --start 2000 --end 2019
-python src/gen_static_inputs.py $A all --year 2015 --cohorts natural crops pasture
+python src/gen_static_inputs.py $A all --year 2015 --cohorts primary secondary crops pasture urban
 ```
 
 `gen_climate_inputs.py` writes `climate_<source>.nc` and `varmap_<source>.yaml` (copy it into `run_config.yaml`; set `netcdf_climate_in_frequency: daily`). `all` builds `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` (and the files they are made from); `--cohorts` and `--min-area` select the cohorts of `lulc.nc`.

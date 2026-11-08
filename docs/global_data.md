@@ -7,12 +7,12 @@ Needs `pip install xarray netcdf4 pandas scipy rioxarray` and `wget`.
 ```bash
 A="--out INPUT --cache downloads --bbox -125 -110 32 49 --res 0.5"
 python src/gen_static_inputs.py $A co2 --start 2015 --end 2024
-python src/gen_static_inputs.py $A all --year 2015 --cohorts natural crops pasture --min-area 1
+python src/gen_static_inputs.py $A all --year 2015 --cohorts primary secondary crops pasture urban --min-area 1
 ```
 
 `all` writes `elev.nc`, `soil.nc`, `wind.nc`, `ozone.nc`, `ndep.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc`; the ozone and lightning steps are skipped with a message if their login is missing
 (`CEDA_TOKEN`, `EARTHDATA_TOKEN`, see below). Each step can also be run alone (`soil`, `elev`, `wind`, `ndep --start 2005 --end 2014`, `ozone`, `lightning`, `population`, `static`, `lulc`).
-`--cohorts` keeps only the listed cohorts (`natural`, `crops`, `pasture`; the cohort dimension of `lulc.nc` follows the order given here) and `--min-area` drops cohorts smaller than that area in a cell (km2).
+`--cohorts` keeps only the listed cohorts (`primary`, `secondary`, `crops`, `pasture`, `urban`; the cohort dimension of `lulc.nc` follows the order given here) and `--min-area` drops cohorts smaller than that area in a cell (km2).
 LUH2 (6 GB) is downloaded unless `--luh2` and `--luh2-static` point to local copies.
 
 Every step downloads its source into `--cache` once. `tools/run_test.py` runs all of them for the globe at 1 degree.
@@ -72,11 +72,9 @@ wget https://luh.umd.edu/LUH2/LUH2_v2h/states.nc                    # 5.8 GB
 wget https://luh.umd.edu/LUH2/LUH2_v2h/staticData_quarterdeg.nc
 ```
 
-The `ndep` step (downloaded file, units and the 1 degree result), the `lightning` step on a synthetic file and the `population` step on a synthetic raster were tested, as were the CO2, soil, elevation and wind steps.
-The LIS/OTD file `LISOTD_HRMC_V2.3.2015.nc` is found by the script: it tries the open GHRC archive and then the links that NASA CMR lists for the collection. NASA serves it only after a free Earthdata Login (EDL).
-If the download fails, get an EDL token at https://urs.earthdata.nasa.gov (profile, Generate Token) and set `EARTHDATA_TOKEN`, or put the login in `~/.netrc` (`machine urs.earthdata.nasa.gov login <user> password <password>`). The file could not be downloaded without that login,
-so the step was tested on a synthetic file with the layout of the product table (variable `HRMC_COM_FR`, 12 x 720 x 360, flashes km-2 day-1); the real file may differ in dimension order, which the script resolves by size. The WorldPop header (EPSG:4326, 0.0083 degree, float32, nodata -3.4e38) was read from the full 830 MB raster and a 20 x 10 degree box was aggregated.
-The LUH2 step was tested on a synthetic file, not on the downloaded `states.nc`.
+Tested on real data: the `ndep`, CO2, soil, elevation and wind steps, the `lightning` step on the downloaded LIS/OTD file (variable `HRMC_COM_FR`, flashes km-2 day-1, dimensions found by size, annual totals of 30, 10 and 56 flashes km-2 yr-1 in Florida, Pennsylvania and the Congo)
+and the `population` step on the full 830 MB WorldPop raster at 1 degree for the globe (header EPSG:4326, 0.0083 degree, float32, nodata -3.4e38).
+The `lulc` step was tested on synthetic LUH2 files with the documented layout (descending latitude, `secma`), not on the downloaded `states.nc`; its headers were not inspected.
 Scenario CO2 after the observed years is not downloaded; pass a file with one `year ppmv` pair per line to `co2 --scenario`
 (see https://esgf-node.llnl.gov/projects/input4mips/).
 
@@ -96,22 +94,25 @@ For other data pass `--file`, `--var` and `--scale`. Another source is the ACCMI
 
 ## Land cover
 
-The script writes up to three cohorts per cell from the LUH2 fractions of one year and the cell area:
+The script writes up to seven cohorts per cell from the LUH2 fractions of one year and the cell area, in the encoding of the Hurtt cohort file of TEM_Biogeography (`cruHurtt3.2.1lulccohrts`, 2014):
 
-| Cohort | LUH2 states | `currentveg` | `agstate` | `standage` |
-|---|---|---|---|---|
-| 1 natural | `primf`, `primn`, `secdf`, `secdn`, `range` | potential vegetation of the cell | 0 | 3000 |
-| 2 crops | `c3ann`, `c4ann`, `c3per`, `c4per`, `c3nfx` | 50 (Crops) | 1 | 1 |
-| 3 pasture | `pastr` | 51 (Pasture) | 1 | 1 |
+| Cohort | LUH2 states | `potveg`, `currentveg`, `subtype` | `agstate` | `fertflag`, `irrgflag` | `standage` |
+|---|---|---|---|---|---|
+| `primary` | `primf`, `primn` | potential vegetation | 0 | 0 | 3000 |
+| `secondary` | `secdf`, `secdn` | potential vegetation | 0 | 0 | `secma`, 425 if absent |
+| `crops` | `c3ann`, `c4ann`, `c3per`, `c4per`, `c3nfx` | 50 | 1 | 1 | 0 |
+| `pasture` | `pastr`, `range` | 51 | 2 | 0 | 0 |
+| `urban` | `urban` | 48 | 3 | 1 | 0 |
 
-`chrtarea` is the area in km2, `potveg` the TEM type of the potential vegetation, `subtype` equals `currentveg` and `FRI` is 2000.
-A cohort exists where its area exceeds 0.001 km2. The model counts the cohorts of each cell from the cells where `standage` has data.
-`cohort`, `potveg`, `currentveg` and `agstate` carry `flag_values` and `flag_meanings` that list the TEM vegetation types by name. Urban land is not simulated.
+For the mixed potential types 8, 14, 27 and 31 the primary and the secondary cohort are written twice, once per component, with `subtype` 9 and 10, 12 and 16, 12 and 16, and 10 and 12 and the full area in both, as in the Hurtt file.
+`chrtarea` is the area in km2 and `FRI` is 2000. A cohort exists where its area exceeds `--min-area` (0.001 km2). The model counts the cohorts of each cell from the cells where `standage` has data.
+`cohort` lists the cohort names; `potveg`, `currentveg` and `subtype` carry `flag_values` and `flag_meanings` that list the TEM vegetation types by name.
 
 The 15 classes of Ramankutty and Foley map to TEM types (`params/biogeography/tcomm50_lulc.yaml` of TEM_2026) as 1 to 16, 2 to 18, 3 to 33, 4 to 9, 5 to 10,
-6 and 7 to 4, 8 to 8, 9 to 14, 10 to 13, 11 and 12 to 15, 13 to 3, 14 to 21 and 15 to 2. This crosswalk, the `subtype` rule, `standage` of the managed cohorts and
-`agstate` of pasture are assumptions of the script; the model developers should confirm them before a production run.
-Management layers (`tillflag`, `fertflag`, `irrgflag`) and land-cover change in time are not written, so a run uses `tlulcflag: 0`.
+6 and 7 to 4, 8 to 8, 9 to 14 (31 poleward of 23.5 degrees), 10 to 13, 11 and 12 to 15, 13 to 3, 14 to 21 and 15 to 2.
+The Hurtt file used TEM's own finer potential vegetation: in 3381 cells of the lower 48 states it agrees with this crosswalk in 44 percent of the cells, so results differ from the old runs where the types differ.
+The savanna rule, the crosswalk and the age of secondary stands are assumptions of the script; the model developers should confirm them before a production run.
+Tillage, disturbance and land-cover change in time are not written, so a run uses `tlulcflag: 0`.
 
 `lulc.nc` has `cohort` as dimension and as int64 coordinate; `lat` and `lon` are float32, categorical fields int64 with `_FillValue -9999`, other fields float32.
 The layouts of all files are in `docs/io_structure.md` of TEM_2026.

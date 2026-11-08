@@ -4,9 +4,9 @@ Each subcommand writes one file of INPUT/ on the grid given by --bbox LON_MIN LO
 (cell centres on multiples of res from the minimum). The subcommand all writes every static input including lulc.nc.
 See docs/global_data.md of TEM_UW_APP for the sources, units and caveats.
 
-    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 --res 0.5 all --cohorts natural crops
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 --res 0.5 all --cohorts primary secondary crops
     python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 co2 --start 2015 --end 2100
-    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 lulc --year 2015 --cohorts natural --min-area 10
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 lulc --year 2015 --cohorts primary --min-area 10
 """
 
 import argparse
@@ -63,13 +63,19 @@ POTVEG_TO_TEM = {
     14: 21,
     15: 2,
 }
-NATURAL = ("primf", "primn", "secdf", "secdn", "range")
 CROPS = ("c3ann", "c4ann", "c3per", "c4per", "c3nfx")
+# cohort: (LUH2 states, currentveg or None for the potential vegetation, agstate, standage, fertilizer and irrigation flag)
+# as in the Hurtt cohort file of TEM_Biogeography (cruHurtt3.2.1lulccohrts, 2014); pasture holds managed pasture and rangeland
 COHORTS = {
-    "natural": (NATURAL, None),
-    "crops": (CROPS, 50),
-    "pasture": (("pastr",), 51),
-}  # cohort: (LUH2 states, TEM currentveg)
+    "primary": (("primf", "primn"), None, 0, 3000.0, 0),
+    "secondary": (("secdf", "secdn"), None, 0, 425.0, 0),
+    "crops": (CROPS, 50, 1, 0.0, 1),
+    "pasture": (("pastr", "range"), 51, 2, 0.0, 0),
+    "urban": (("urban",), 48, 3, 0.0, 1),
+}
+# potential vegetation types that are mixtures: one natural cohort per component, subtype = the community of the component
+MIXED = {8: (9, 10), 14: (12, 16), 27: (12, 16), 31: (10, 12)}
+SECONDARY_AGE = 425.0  # standage when states.nc has no secma
 LUH2 = "https://luh.umd.edu/LUH2/LUH2_v2h"
 # TEM vegetation types and names, from params/biogeography/tcomm50_lulc.yaml (attributes of lulc.nc)
 VEG_TYPES = list(range(1, 57))
@@ -496,7 +502,7 @@ def ndep(a: argparse.Namespace) -> None:
 
 
 def lulc(a: argparse.Namespace) -> None:
-    """Cohorts of each cell from LUH2 states of one year and the Ramankutty and Foley potential vegetation."""
+    """Cohorts of each cell from the LUH2 states of one year and the Ramankutty and Foley potential vegetation."""
     lon, lat = target(a)
     pv_tar = fetch(POTVEG, Path(a.cache))
     with tarfile.open(pv_tar) as t:
@@ -514,6 +520,8 @@ def lulc(a: argparse.Namespace) -> None:
     pot = xr.apply_ufunc(
         lambda x: np.vectorize(lambda k: POTVEG_TO_TEM.get(int(k), 0))(x), pv
     )
+    # savanna outside the tropics is Temperate Savannas (31), as in the Hurtt cohort file
+    pot = xr.where((pv == 9) & (np.abs(pv.lat) >= 23.5), 31, pot).values
     st = xr.open_dataset(
         a.luh2 or fetch(f"{LUH2}/states.nc", Path(a.cache)), decode_times=False
     )
@@ -525,81 +533,98 @@ def lulc(a: argparse.Namespace) -> None:
         a.luh2_static or fetch(f"{LUH2}/staticData_quarterdeg.nc", Path(a.cache))
     ).sortby("lat")
     area = stat["carea"] * (1 - stat["icwtr"])
-    sel = {k: v for k, v in COHORTS.items() if k in a.cohorts}
-    n = len(sel)
-    shape = (n, lat.size, lon.size)
-    out = {
-        k: np.full(shape, INT_FILL, "int64")
-        for k in ("potveg", "currentveg", "subtype", "agstate", "agprevstate", "mxc")
-    }
-    chrt = np.full(shape, np.nan, "float32")
-    for c, (names, veg) in enumerate(sel.values()):
-        km2 = sum(st[s].fillna(0) for s in names) * area
-        km2 = km2.sel(
+
+    def box_sum(da: xr.DataArray) -> np.ndarray:
+        da = da.sel(
             lon=slice(lon[0] - a.res, lon[-1] + a.res),
             lat=slice(lat[0] - a.res, lat[-1] + a.res),
         )
-        tot = km2.assign_coords(lon=km2.lon.values, lat=km2.lat.values)
-        i = np.floor((tot.lon.values - (lon[0] - a.res / 2)) / a.res).astype(int)
-        j = np.floor((tot.lat.values - (lat[0] - a.res / 2)) / a.res).astype(int)
-        ok_i, ok_j = (i >= 0) & (i < lon.size), (j >= 0) & (j < lat.size)
-        s = (
-            tot.isel(lon=ok_i, lat=ok_j)
-            .groupby(xr.DataArray(i[ok_i], dims="lon", name="i"))
-            .sum()
-            .groupby(xr.DataArray(j[ok_j], dims="lat", name="j"))
-            .sum()
+        return box_mean(da.fillna(0.0), lon, lat, a.res, how="sum").fillna(0).values
+
+    first = np.arange(VEG_TYPES[-1] + 1)
+    second = np.where(np.isin(first, list(MIXED)), first, -1)
+    for k, (c1, c2) in MIXED.items():
+        first[k], second[k] = c1, c2
+    slots = [  # (cohort, component of a mixed type)
+        (k, c)
+        for k, v in COHORTS.items()
+        if k in a.cohorts
+        for c in ((0, 1) if v[1] is None else (0,))
+    ]
+    shape = (len(slots), lat.size, lon.size)
+    out = {
+        k: np.full(shape, INT_FILL, "int64")
+        for k in (
+            "potveg",
+            "currentveg",
+            "subtype",
+            "agstate",
+            "agprevstate",
+            "fertflag",
+            "irrgflag",
         )
-        grid = np.zeros((lat.size, lon.size))
-        grid[np.ix_(np.unique(j[ok_j]), np.unique(i[ok_i]))] = s.transpose(
-            "j", "i"
-        ).values
-        has = (grid > a.min_area) & (pot.values > 0)
-        v = pot.values if veg is None else np.full_like(pot.values, veg)
-        chrt[c] = np.where(has, grid, np.nan)
-        out["potveg"][c] = np.where(has, pot.values, INT_FILL)
-        out["currentveg"][c] = np.where(has, v, INT_FILL)
-        out["subtype"][c] = np.where(has, v, INT_FILL)
-        out["agstate"][c] = np.where(has, int(veg is not None), INT_FILL)
-        out["agprevstate"][c] = np.where(has, int(veg is not None), INT_FILL)
+    }
+    chrt = np.full(shape, np.nan, "float32")
+    age = np.full(shape, np.nan, "float32")
+    for i, (name, comp) in enumerate(slots):
+        states, veg, ag, stand, fert = COHORTS[name]
+        grid = box_sum(sum(st[s].fillna(0) for s in states) * area)
+        if name == "secondary" and "secma" in st:
+            years = box_sum(st["secma"] * sum(st[s].fillna(0) for s in states) * area)
+            stand = np.where(grid > 0, years / np.where(grid > 0, grid, 1), 0)
+            stand = np.where(stand > 0, stand.round(), SECONDARY_AGE)
+        has = (grid > a.min_area) & (pot > 0)
+        if veg is None:
+            v = pot if comp == 0 else second[pot]
+            sub = first[pot] if comp == 0 else second[pot]
+            has &= v > 0
+            cur, potv = pot, pot
+        else:
+            sub = cur = potv = np.full_like(pot, veg)
+        chrt[i] = np.where(has, grid, np.nan)
+        age[i] = np.where(has, stand, np.nan)
+        for k, x in (
+            ("potveg", potv),
+            ("currentveg", cur),
+            ("subtype", sub),
+            ("agstate", ag),
+            ("agprevstate", ag),
+            ("fertflag", fert),
+            ("irrgflag", fert),
+        ):
+            out[k][i] = np.where(has, x, INT_FILL)
     has = ~np.isnan(chrt)
     dims = ("cohort", "lat", "lon")
     ds = xr.Dataset(
         {
-            "standage": (
-                dims,
-                np.where(
-                    has,
-                    np.where(
-                        (np.array(list(sel)) == "natural")[:, None, None], 3000.0, 1.0
-                    ),
-                    np.nan,
-                ).astype("float32"),
-            ),
+            "standage": (dims, age),
             "chrtarea": (dims, chrt, {"units": "km2"}),
-            **{
-                k: (dims, out[k])
-                for k in ("potveg", "currentveg", "subtype", "agstate", "agprevstate")
-            },
+            **{k: (dims, v) for k, v in out.items()},
             "FRI": (dims, np.where(has, 2000.0, np.nan).astype("float32")),
         },
-        coords={"cohort": np.arange(1, n + 1, dtype="int64"), "lat": lat, "lon": lon},
+        coords={
+            "cohort": np.arange(1, len(slots) + 1, dtype="int64"),
+            "lat": lat,
+            "lon": lon,
+        },
     )
-    for k in ("potveg", "currentveg", "subtype", "agstate", "agprevstate"):
+    for k in out:
         ds[k].encoding["_FillValue"] = np.int64(INT_FILL)
     ds["cohort"].attrs = {
         "long_name": "cohort index within the cell",
-        "flag_meanings": " ".join(sel),
+        "flag_meanings": " ".join(
+            n if c == 0 else n + "_second_component" for n, c in slots
+        ),
     }
-    for k in ("potveg", "currentveg"):
+    for k in ("potveg", "currentveg", "subtype"):
         ds[k].attrs = {
             "long_name": f"TEM {k} type",
             "flag_values": np.array(VEG_TYPES, dtype="int32"),
             "flag_meanings": " ".join(VEG_NAMES),
         }
     ds["agstate"].attrs = {
-        "flag_values": np.array([0, 1], dtype="int32"),
-        "flag_meanings": "natural_vegetation agriculture",
+        "flag_values": np.array([0, 1, 2, 3], dtype="int32"),
+        "flag_meanings": "natural_vegetation crops pasture urban",
     }
     write(ds, a, "lulc.nc")
 
