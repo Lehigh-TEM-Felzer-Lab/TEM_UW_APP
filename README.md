@@ -75,7 +75,7 @@ python src/make_global_inputs.py $A static
 python src/make_global_inputs.py $A lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
 ```
 
-Ozone needs a CEDA token (`CEDA_TOKEN`); all other files are downloaded by their subcommand (`lightning`, `population`, `ndep`, ...). Sources, download links,
+Ozone needs a CEDA token (`CEDA_TOKEN`) and lightning a NASA Earthdata login (`EARTHDATA_TOKEN`); all other files are downloaded by their subcommand (`lightning`, `population`, `ndep`, ...). Sources, download links,
 units and the land-cover assumptions are in [docs/global_data.md](docs/global_data.md). Files of older TEM versions are converted as in
 [docs/converting.md](docs/converting.md). Then set the `netcdf_*_in_file` keys of `run_config.yaml` to the files.
 

@@ -12,9 +12,11 @@ Each subcommand writes one file of INPUT/ on the grid given by --lon-min/--lon-m
 
 import argparse
 import io
+import json
 import os
 import subprocess
 import tarfile
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -29,7 +31,11 @@ ETOPO = "https://www.ngdc.noaa.gov/thredds/fileServer/global/ETOPO2022/60s/60s_s
 WORLDCLIM_WIND = (
     "https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_10m_wind.zip"
 )
-HRMC = "https://ghrc.nsstc.nasa.gov/pub/lis/climatology/LIS-OTD/HRMC/data/nc/LISOTD_HRMC_V2.3.2015.nc"
+HRMC = "LISOTD_HRMC_V2.3.2015.nc"
+HRMC_OPEN = (
+    "https://ghrc.nsstc.nasa.gov/pub/lis/climatology/LIS-OTD/HRMC/data/nc/" + HRMC
+)
+CMR = "https://cmr.earthdata.nasa.gov/search/granules.json?collection_concept_id=C1995863290-GHRC_DAAC&page_size=50"
 WORLDPOP = "https://data.worldpop.org/GIS/Population/Global_2000_2020/2020/0_Mosaicked/ppp_2020_1km_Aggregated.tif"
 ISIMIP_NDEP = "https://files.isimip.org/ISIMIP3b/InputData/socioeconomic/n-deposition/histsoc/ndep-{}_histsoc_monthly_1850_2014.nc"
 CEDA_OZONE = "https://dap.ceda.ac.uk/badc/proc-earth-model/data/ozone-metrics/v2.7/CCMI_SurfaceOzoneObs_1x1_Monthly_v2.7.nc"
@@ -145,6 +151,51 @@ def fetch(url: str, cache: Path, header: str | None = None) -> Path:
     return path
 
 
+def hrmc_file(cache: Path) -> Path:
+    """LIS/OTD HRMC: the open GHRC archive first, then the links NASA CMR lists (Earthdata Login: EARTHDATA_TOKEN or ~/.netrc)."""
+    path = cache / HRMC
+    if path.exists():
+        return path
+    cache.mkdir(parents=True, exist_ok=True)
+    urls = [HRMC_OPEN]
+    try:
+        with urllib.request.urlopen(CMR, timeout=60) as r:
+            for e in json.load(r)["feed"]["entry"]:
+                urls += [
+                    link["href"]
+                    for link in e.get("links", [])
+                    if link["href"].startswith("https")
+                    and link["href"].endswith("/" + HRMC)
+                ]
+    except OSError:
+        pass
+    token = os.environ.get("EARTHDATA_TOKEN")
+    cookies = str(Path.home() / ".urs_cookies")
+    for url in dict.fromkeys(urls):
+        cmd = ["wget", "-q", "-t", "2", "-O", str(path) + ".part"]
+        if "earthdata" in url:
+            cmd += (
+                ["--header", f"Authorization: Bearer {token}"]
+                if token
+                else [
+                    "--load-cookies",
+                    cookies,
+                    "--save-cookies",
+                    cookies,
+                    "--keep-session-cookies",
+                ]
+            )
+        if subprocess.run([*cmd, url], check=False).returncode == 0:
+            Path(str(path) + ".part").rename(path)
+            return path
+    raise SystemExit(
+        "lightning: LIS/OTD HRMC download failed. NASA now asks for a free Earthdata Login: "
+        "create an account at https://urs.earthdata.nasa.gov, then set EARTHDATA_TOKEN "
+        "(profile > Generate Token) or put the login in ~/.netrc "
+        "(machine urs.earthdata.nasa.gov login <user> password <password>)"
+    )
+
+
 def target(a: argparse.Namespace) -> tuple[np.ndarray, np.ndarray]:
     lon = np.arange(a.lon_min, a.lon_max + a.res / 2, a.res).round(4)
     lat = np.arange(a.lat_min, a.lat_max + a.res / 2, a.res).round(4)
@@ -231,7 +282,7 @@ def co2(a: argparse.Namespace) -> None:
 
 def lightning(a: argparse.Namespace) -> None:
     """Lightning flashes [km-2 month-1] by month: LIS/OTD 0.5 degree monthly flash rate climatology (HRMC v2.3.2015) times the days of the month."""
-    ds = xr.open_dataset(a.file or fetch(HRMC, Path(a.cache)), decode_times=False)
+    ds = xr.open_dataset(a.file or hrmc_file(Path(a.cache)), decode_times=False)
     var = a.var or next(v for v in ds.data_vars if v.upper() == "HRMC_COM_FR")
     da = ds[var].squeeze()
     sizes = {720: "lon", 360: "lat", 12: "month"}

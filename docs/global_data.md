@@ -10,9 +10,9 @@ python src/make_global_inputs.py $A co2 --start 2015 --end 2024
 python src/make_global_inputs.py $A soil
 python src/make_global_inputs.py $A elev
 python src/make_global_inputs.py $A wind
-python src/make_global_inputs.py $A lightning
 python src/make_global_inputs.py $A population
 python src/make_global_inputs.py $A ndep --start 2005 --end 2014
+EARTHDATA_TOKEN=<token> python src/make_global_inputs.py $A lightning   # NASA login, see below
 CEDA_TOKEN=<token> python src/make_global_inputs.py $A ozone
 python src/make_global_inputs.py $A static
 python src/make_global_inputs.py $A lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
@@ -27,7 +27,7 @@ The regridding is the mean of the source cells in a target cell, so the target s
 | File | Variable (unit) | Source |
 |---|---|---|
 | `co2.nc` | `co2` (ppmv) | NOAA GML Mauna Loa annual mean; SSP scenarios for later years (Meinshausen et al. 2020) |
-| `flash.nc` | `lightning_flashes` (km-2 month-1) | LIS/OTD 0.5 degree monthly climatology HRMC v2.3.2015 (Cecil et al. 2014), flash rate per day times the days of the month |
+| `flash.nc` | `lightning_flashes` (km-2 month-1) | LIS/OTD 0.5 degree monthly climatology HRMC v2.3.2015 (Cecil et al. 2014), flash rate per day times the days of the month; needs an Earthdata Login |
 | `popdens.nc` | `population_density` (km-2) | WorldPop 2020 persons per 1 km pixel (WorldPop 2018), summed in each cell and divided by the cell area |
 | `static.nc` | `elev` (m) | ETOPO 2022, 60 arc-second ice surface (NOAA NCEI 2022) |
 | | `sand`, `silt`, `clay` (percent) | SoilGrids 2.0 at 5 km (Poggio et al. 2021), layers 0-5, 5-15 and 15-30 cm weighted by thickness, g kg-1 divided by 10 |
@@ -46,7 +46,6 @@ N=https://www.ngdc.noaa.gov/thredds/fileServer/global/ETOPO2022/60s/60s_surface_
 wget $N/ETOPO_2022_v1_60s_N90W180_surface.nc
 wget https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_10m_wind.zip
 wget https://sage-public-files.s3.amazonaws.com/global-potential-vegetation/potveg_nc.tar.gz
-wget https://ghrc.nsstc.nasa.gov/pub/lis/climatology/LIS-OTD/HRMC/data/nc/LISOTD_HRMC_V2.3.2015.nc
 wget https://data.worldpop.org/GIS/Population/Global_2000_2020/2020/0_Mosaicked/ppp_2020_1km_Aggregated.tif
 I=https://files.isimip.org/ISIMIP3b/InputData/socioeconomic/n-deposition/histsoc
 wget $I/ndep-nhx_histsoc_monthly_1850_2014.nc    # also ndep-noy
@@ -54,7 +53,11 @@ wget https://luh.umd.edu/LUH2/LUH2_v2h/states.nc                    # 5.8 GB
 wget https://luh.umd.edu/LUH2/LUH2_v2h/staticData_quarterdeg.nc
 ```
 
-The `ndep` step (downloaded file, units and the 1 degree result), the `lightning` step on a synthetic file and the `population` step on a synthetic raster were tested, as were the CO2, soil, elevation and wind steps. The LIS/OTD file could not be reached from the test machine, so its variable name (`HRMC_COM_FR`), its dimensions and its unit (flashes km-2 day-1) are assumed from the dataset description; if the step fails, download the file and pass it with `--file` (and `--var`). The WorldPop step was not run on the full 830 MB raster. The LUH2 step was tested on a synthetic file, not on the downloaded `states.nc`.
+The `ndep` step (downloaded file, units and the 1 degree result), the `lightning` step on a synthetic file and the `population` step on a synthetic raster were tested, as were the CO2, soil, elevation and wind steps.
+The LIS/OTD file `LISOTD_HRMC_V2.3.2015.nc` is found by the script: it tries the open GHRC archive and then the links that NASA CMR lists for the collection. NASA now serves it only after a free Earthdata Login
+(https://urs.earthdata.nasa.gov): set `EARTHDATA_TOKEN` (profile, Generate Token) or put the login in `~/.netrc` (`machine urs.earthdata.nasa.gov login <user> password <password>`). The file could not be downloaded without that login,
+so the step was tested on a synthetic file with the layout of the product table (variable `HRMC_COM_FR`, 12 x 720 x 360, flashes km-2 day-1); the real file may differ in dimension order, which the script resolves by size. The WorldPop step was not run on the full 830 MB raster.
+The LUH2 step was tested on a synthetic file, not on the downloaded `states.nc`.
 Scenario CO2 after the observed years is not downloaded; pass a file with one `year ppmv` pair per line to `co2 --scenario`
 (see https://esgf-node.llnl.gov/projects/input4mips/).
 
