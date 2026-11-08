@@ -12,9 +12,10 @@ every command.
 
 Climate is ERA5 daily statistics of one year (the CDS dataset derived-era5-single-levels-daily-statistics). The monthly
 case aggregates it to months, the daily case runs the 365 days of that year (the model cannot stop within a year).
-Soil, elevation, wind, CO2 and land cover are made by src/make_global_inputs.py. Ozone and N deposition need files that
-cannot be fetched without a login (docs/global_data.md); without --ozone and --ndep a constant placeholder is used
-(AOT40 0, N deposition 1000 mg N m-2 yr-1), so fluxes in a test are not realistic.
+Every other input is made by src/make_global_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
+wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) and N deposition (ISIMIP3b). Ozone comes from
+CEDA when CEDA_TOKEN is set (docs/global_data.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
+(AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
 """
 
 import argparse
@@ -40,7 +41,6 @@ GITHUB = "https://github.com/Lehigh-TEM-Felzer-Lab"
 REPOS = {
     "TEM_2026": "TEM_2026",
     "TEM_UW_APP": "TEM_UW_APP",
-    "TEM_Biogeography": "TEM_Biogeography",
 }
 LUH2 = "https://luh.umd.edu/LUH2/LUH2_v2h"
 YEAR = 2019  # a year without 29 February
@@ -133,27 +133,12 @@ def need(cmd: list[str], **kw) -> None:
 
 
 def clone(work: Path) -> None:
-    """Clone or update the repositories; of TEM_Biogeography only static/ (fire.nc)."""
+    """Clone or update the repositories."""
     (work / "repos").mkdir(parents=True, exist_ok=True)
     for name, repo in REPOS.items():
         dest = work / "repos" / name
         if dest.exists():
             need(["git", "-C", str(dest), "pull", "--ff-only", "-q"])
-        elif name == "TEM_Biogeography":
-            need(
-                [
-                    "git",
-                    "clone",
-                    "-q",
-                    "--depth",
-                    "1",
-                    "--filter=blob:none",
-                    "--sparse",
-                    f"{GITHUB}/{repo}",
-                    str(dest),
-                ]
-            )
-            need(["git", "-C", str(dest), "sparse-checkout", "set", "static"])
         else:
             need(["git", "clone", "-q", f"{GITHUB}/{repo}", str(dest)])
     for name in ("TEM_2026", "TEM_UW_APP"):
@@ -288,43 +273,50 @@ def fetch(url: str, dest: Path) -> Path:
 
 
 def static_data(work: Path, args: argparse.Namespace) -> Path:
-    """data/: co2, elev, soil, wind, ozone, ndep, static, lulc, flash and popdens at the model grid."""
+    """data/: co2, elev, soil, wind, ozone, ndep, static, lulc, flash and popdens at the model grid, all made here."""
     data, app = work / "data", work / "repos" / "TEM_UW_APP"
     data.mkdir(exist_ok=True)
+    (work / "logs").mkdir(exist_ok=True)
     grid = ["--out", str(data), "--cache", str(work / "downloads"), "--res", "1.0"] + [
         x for k, v in BOX.items() for x in (f"--{k.replace('_', '-')}", str(v))
     ]
 
-    def make(*sub: str) -> None:
-        need(
+    def make(*sub: str) -> int:
+        say(f"data: {sub[0]}")
+        return sh(
             [sys.executable, str(app / "src" / "make_global_inputs.py"), *grid, *sub],
             log=work / "logs" / f"data_{sub[0]}.log",
         )
 
-    (work / "logs").mkdir(exist_ok=True)
-    steps = {
+    for f, sub in {
         "co2.nc": ("co2", "--start", str(YEAR), "--end", str(YEAR)),
-        "flash.nc": (
-            "fire",
-            "--fire-file",
-            str(work / "repos" / "TEM_Biogeography" / "static" / "fire.nc"),
-        ),
         "soil.nc": ("soil",),
         "elev.nc": ("elev",),
         "wind.nc": ("wind",),
-    }
-    for f, sub in steps.items():
-        if not (data / f).exists():
-            say(f"data: {sub[0]}")
-            make(*sub)
+    }.items():
+        if not (data / f).exists() and make(*sub):
+            sys.exit(f"data step failed: {sub[0]} (logs/data_{sub[0]}.log)")
+    # inputs of the fire cases and of the ozone and N deposition files; a failed step leaves the file out or a placeholder
+    for f, sub in {"flash.nc": ("lightning",), "popdens.nc": ("population",)}.items():
+        if not (data / f).exists() and make(*sub):
+            say(
+                f"WARNING {sub[0]} failed, the fire cases are skipped (logs/data_{sub[0]}.log)"
+            )
     for name, spec, const in (("ozone", args.ozone, OZONE), ("ndep", args.ndep, NDEP)):
         if (data / f"{name}.nc").exists():
             continue
         if spec:
             file, var, *scale = spec.split(":")
-            make(name, "--file", file, "--var", var, "--scale", *(scale or ["1"]))
+            ok = (
+                make(name, "--file", file, "--var", var, "--scale", *(scale or ["1"]))
+                == 0
+            )
+        elif name == "ndep" or os.environ.get("CEDA_TOKEN"):
+            ok = make(name) == 0
         else:
-            say(f"data: {name} placeholder {const}")
+            ok = False
+        if not ok:
+            say(f"data: {name} placeholder {const} (ozone needs CEDA_TOKEN or --ozone)")
             lon = np.arange(BOX["lon_min"], BOX["lon_max"] + 0.5).astype("float32")
             lat = np.arange(BOX["lat_min"], BOX["lat_max"] + 0.5).astype("float32")
             shape = (
@@ -332,7 +324,7 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
             )
             dims = ("month", "lat", "lon") if name == "ozone" else ("lat", "lon")
             unit = "ppb h" if name == "ozone" else "mg N m-2 yr-1"
-            ds = xr.Dataset(
+            xr.Dataset(
                 {
                     name: (
                         dims,
@@ -341,10 +333,9 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
                     )
                 },
                 coords={"lat": lat, "lon": lon},
-            )
-            ds.to_netcdf(data / f"{name}.nc")
-    if not (data / "static.nc").exists():
-        make("static")
+            ).to_netcdf(data / f"{name}.nc")
+    if not (data / "static.nc").exists() and make("static"):
+        sys.exit("data step failed: static (logs/data_static.log)")
     if not (data / "lulc.nc").exists():
         say("data: lulc (LUH2, 6 GB)")
         states = fetch(f"{LUH2}/states.nc", work / "downloads" / "states.nc")
@@ -352,7 +343,7 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
             f"{LUH2}/staticData_quarterdeg.nc",
             work / "downloads" / "staticData_quarterdeg.nc",
         )
-        make(
+        if make(
             "lulc",
             "--luh2",
             str(states),
@@ -360,7 +351,8 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
             str(static),
             "--year",
             str(LUH2_YEAR),
-        )
+        ):
+            sys.exit("data step failed: lulc (logs/data_lulc.log)")
     return data
 
 
@@ -404,6 +396,13 @@ def run_case(
         "temoutvars": OUTVARS,
     }
     if over.pop("fire", False):
+        if not (data / "flash.nc").exists() or not (data / "popdens.nc").exists():
+            return {
+                "case": name,
+                "rc": -1,
+                "minutes": 0.0,
+                "note": "skipped: no flash.nc or popdens.nc",
+            }
         cfg |= {
             "netcdf_fire_in_file": str(data / "flash.nc"),
             "netcdf_population_in_file": str(data / "popdens.nc"),
@@ -483,7 +482,7 @@ def main() -> int:
         )
     p.add_argument(
         "--ozone",
-        help="FILE:VAR[:SCALE] of a gridded AOT40 file instead of the placeholder",
+        help="FILE:VAR[:SCALE] of a gridded AOT40 file instead of CEDA or the placeholder",
     )
     p.add_argument(
         "--ndep",

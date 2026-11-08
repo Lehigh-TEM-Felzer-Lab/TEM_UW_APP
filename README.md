@@ -11,7 +11,7 @@ the files of the older TEM versions. The earlier CSV/XML workflow is not support
 | `case_submit.sh` | entry point, run from the case directory |
 | `config/run_config.yaml` | all keys with defaults and comments |
 | `src/driver.py`, `tem_climate.py`, `tem_config.py` | case builder: regridding, units, `tem_config.yaml` |
-| `src/make_global_inputs.py` | builds `co2.nc`, `static.nc`, `lulc.nc` and the fire files for any region |
+| `src/make_global_inputs.py` | downloads the global datasets and builds `co2.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` for any region |
 | `src/xml2yaml.py`, `src/ascii2nc.py` | convert old XML, parameter and ASCII files |
 | `launchers/` | local and SLURM launchers |
 | `examples/west/` | western United States example |
@@ -75,13 +75,13 @@ python src/make_global_inputs.py $A static
 python src/make_global_inputs.py $A lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
 ```
 
-Ozone, N deposition and the fire files come from files you supply (`ozone`, `ndep` and `fire` subcommands). Sources, download links,
+Ozone needs a CEDA token (`CEDA_TOKEN`); all other files are downloaded by their subcommand (`lightning`, `population`, `ndep`, ...). Sources, download links,
 units and the land-cover assumptions are in [docs/global_data.md](docs/global_data.md). Files of older TEM versions are converted as in
 [docs/converting.md](docs/converting.md). Then set the `netcdf_*_in_file` keys of `run_config.yaml` to the files.
 
 # Test
 
-`python tools/run_test.py` is one file that clones TEM_2026 and TEM_UW_APP, builds the model, downloads ERA5 (needs `~/.cdsapirc` and `cdsapi`) and the static data, makes a global 1 degree case for one year and runs it monthly and daily. Flags such as `--competition`, `--fire`, `--all` add cases; `python tools/run_test.py -h` lists them and the docstring describes the work directory, the archive and the placeholders for ozone and N deposition.
+`python tools/run_test.py` is one file that clones TEM_2026 and TEM_UW_APP, builds the model, downloads ERA5 (needs `~/.cdsapirc` and `cdsapi`) and the other input data, makes a global 1 degree case for one year and runs it monthly and daily. Flags such as `--competition`, `--fire`, `--all` add cases; `python tools/run_test.py -h` lists them and the docstring describes the work directory, the archive and the placeholders for ozone and N deposition.
 
 # Documentation
 
@@ -94,6 +94,6 @@ units and the land-cover assumptions are in [docs/global_data.md](docs/global_da
 
 # Limits
 
-- The app writes monthly or daily forcing (`run_dt_units: month` or `day`; daily needs `netcdf_climate_in_frequency: daily` and a TEM_2026 build from `make daily`). Daily physics is not validated.
+- The app writes monthly or daily forcing (`run_dt_units` is `month` or `day`; daily needs daily forcing, `netcdf_climate_in_frequency` set to `daily`, and a TEM_2026 build from `make daily`). Daily physics is not validated.
 - Tested on the western United States example only; the inputs the app writes for it are identical to those shipped with TEM_2026.
 - The global land-cover builder is not validated against the lab's earlier inputs.

@@ -4,7 +4,7 @@ Each subcommand writes one file of INPUT/ on the grid given by --lon-min/--lon-m
 (cell centres on multiples of res from the minimum). See docs/global_data.md of TEM_UW_APP for the sources, units and caveats.
 
     python src/make_global_inputs.py --out INPUT --lon-min -125 --lon-max -110 --lat-min 32 --lat-max 49 co2 --start 2015 --end 2100
-    python src/make_global_inputs.py ... fire --fire-file tem_biogeography/static/fire.nc
+    python src/make_global_inputs.py ... lightning population
     python src/make_global_inputs.py ... soil elev wind
     python src/make_global_inputs.py ... lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
     python src/make_global_inputs.py ... static
@@ -12,6 +12,7 @@ Each subcommand writes one file of INPUT/ on the grid given by --lon-min/--lon-m
 
 import argparse
 import io
+import os
 import subprocess
 import tarfile
 import zipfile
@@ -28,6 +29,12 @@ ETOPO = "https://www.ngdc.noaa.gov/thredds/fileServer/global/ETOPO2022/60s/60s_s
 WORLDCLIM_WIND = (
     "https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_10m_wind.zip"
 )
+HRMC = "https://ghrc.nsstc.nasa.gov/pub/lis/climatology/LIS-OTD/HRMC/data/nc/LISOTD_HRMC_V2.3.2015.nc"
+WORLDPOP = "https://data.worldpop.org/GIS/Population/Global_2000_2020/2020/0_Mosaicked/ppp_2020_1km_Aggregated.tif"
+ISIMIP_NDEP = "https://files.isimip.org/ISIMIP3b/InputData/socioeconomic/n-deposition/histsoc/ndep-{}_histsoc_monthly_1850_2014.nc"
+CEDA_OZONE = "https://dap.ceda.ac.uk/badc/proc-earth-model/data/ozone-metrics/v2.7/CCMI_SurfaceOzoneObs_1x1_Monthly_v2.7.nc"
+DAYS = np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
+EARTH_RADIUS_KM = 6371.0088
 LAYERS = {
     "0-5cm": 5,
     "5-15cm": 10,
@@ -121,19 +128,17 @@ VEG_NAMES = (
 INT_FILL = -9999
 
 
-def fetch(url: str, cache: Path) -> Path:
+def fetch(url: str, cache: Path, header: str | None = None) -> Path:
     """Download into the cache once; an interrupted transfer is resumed with wget -c."""
     cache.mkdir(parents=True, exist_ok=True)
-    path = cache / url.rsplit("/", 1)[1]
+    path = cache / url.split("?")[0].rsplit("/", 1)[1]
     if not path.exists():
         part = path.with_name(path.name + ".part")
+        cmd = ["wget", "-q", "-c", "-O", str(part)] + (
+            ["--header", header] if header else []
+        )
         for _ in range(10):
-            if (
-                subprocess.run(
-                    ["wget", "-q", "-c", "-O", str(part), url], check=False
-                ).returncode
-                == 0
-            ):
+            if subprocess.run([*cmd, url], check=False).returncode == 0:
                 part.rename(path)
                 return path
         raise SystemExit(f"download failed: {url}")
@@ -147,16 +152,20 @@ def target(a: argparse.Namespace) -> tuple[np.ndarray, np.ndarray]:
 
 
 def box_mean(
-    da: xr.DataArray, lon: np.ndarray, lat: np.ndarray, res: float
+    da: xr.DataArray,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    res: float,
+    how: str = "mean",
 ) -> xr.DataArray:
-    """Mean of the source cells that fall in each target cell (source names lon and lat, lon in -180..180)."""
+    """Mean (or sum, how="sum") of the source cells that fall in each target cell (source names lon and lat, lon in -180..180)."""
     for name, c in (("lon", lon), ("lat", lat)):
         i = np.floor((da[name].values - (c[0] - res / 2)) / res).astype(int)
         keep = (i >= 0) & (i < c.size)
         da = (
             da.isel({name: keep})
             .groupby(xr.DataArray(i[keep], dims=name, name="i" + name))
-            .mean(skipna=True)
+            .reduce(getattr(np, "nan" + how), dim=name)
         )
         da = (
             da.rename({"i" + name: name})
@@ -220,19 +229,60 @@ def co2(a: argparse.Namespace) -> None:
     print("wrote", Path(a.out) / "co2.nc")
 
 
-def fire(a: argparse.Namespace) -> None:
-    """Lightning (km-2 month-1) and population density (km-2) from the 0.5 degree fire.nc of TEM_Biogeography."""
-    src = xr.open_dataset(a.fire_file, decode_times=False).rename(time="month")
+def lightning(a: argparse.Namespace) -> None:
+    """Lightning flashes [km-2 month-1] by month: LIS/OTD 0.5 degree monthly flash rate climatology (HRMC v2.3.2015) times the days of the month."""
+    ds = xr.open_dataset(a.file or fetch(HRMC, Path(a.cache)), decode_times=False)
+    var = a.var or next(v for v in ds.data_vars if v.upper() == "HRMC_COM_FR")
+    da = ds[var].squeeze()
+    sizes = {720: "lon", 360: "lat", 12: "month"}
+    da = da.rename({d: sizes[da.sizes[d]] for d in da.dims}).transpose(
+        "month", "lat", "lon"
+    )
+    if "lon" not in da.coords:
+        da = da.assign_coords(
+            lon=np.arange(-179.75, 180, 0.5), lat=np.arange(-89.75, 90, 0.5)
+        )
+    da = da.where(da >= 0, 0.0) * xr.DataArray(DAYS, dims="month")
+    da = da.assign_coords(lon=((da.lon + 180) % 360) - 180).sortby("lon").sortby("lat")
     lon, lat = target(a)
-    src = src.assign_coords(lon=((src.lon + 180) % 360) - 180).sortby("lon")
-    fl = box_mean(src["lightning_flashes"], lon, lat, a.res).assign_attrs(
-        units="km-2 month-1"
+    fl = box_mean(da, lon, lat, a.res).assign_attrs(units="km-2 month-1")
+    write(
+        fl.rename("lightning_flashes")
+        .to_dataset()
+        .assign_coords(month=np.arange(1, 13)),
+        a,
+        "flash.nc",
     )
-    pop = box_mean(src["population_density"], lon, lat, a.res).assign_attrs(
-        units="km-2"
+
+
+def population(a: argparse.Namespace) -> None:
+    """Population density [km-2]: WorldPop 2020 persons per 1 km pixel summed in each target cell, divided by the cell area."""
+    import rioxarray as rx
+
+    da = rx.open_rasterio(
+        a.file or fetch(WORLDPOP, Path(a.cache)),
+        masked=True,
+        chunks={"x": 6000, "y": 6000},
+    ).squeeze(drop=True)
+    lon, lat = target(a)
+    da = da.rename(x="lon", y="lat").sortby("lat")
+    da = da.sel(
+        lon=slice(lon[0] - a.res, lon[-1] + a.res),
+        lat=slice(lat[0] - a.res, lat[-1] + a.res),
     )
-    write(fl.to_dataset().assign_coords(month=np.arange(1, 13)), a, "flash.nc")
-    write(pop.to_dataset(), a, "popdens.nc")
+    da = da.load()
+    people = box_mean(da.fillna(0.0), lon, lat, a.res, how="sum").fillna(0.0)
+    south = np.deg2rad(np.clip(lat - a.res / 2, -90, 90))
+    north = np.deg2rad(np.clip(lat + a.res / 2, -90, 90))
+    area = EARTH_RADIUS_KM**2 * np.deg2rad(a.res) * (np.sin(north) - np.sin(south))
+    dens = (people / xr.DataArray(area, dims="lat", coords={"lat": lat})).astype(
+        "float32"
+    )
+    write(
+        dens.rename("population_density").assign_attrs(units="km-2").to_dataset(),
+        a,
+        "popdens.nc",
+    )
 
 
 def soil(a: argparse.Namespace) -> None:
@@ -343,13 +393,56 @@ def climatology(
 
 
 def ozone(a: argparse.Namespace) -> None:
-    """AOT40 climatology (month, lat, lon) from a gridded ozone NetCDF that you downloaded (docs/global_data.md)."""
-    climatology(a, a.file, a.var, a.scale, "ozone", "ppb h", True)
+    """AOT40 climatology (month, lat, lon): the gridded ozone metrics of CEDA (needs CEDA_TOKEN) or a NetCDF given by --file."""
+    file = a.file
+    if not file:
+        token = os.environ.get("CEDA_TOKEN")
+        if not token:
+            raise SystemExit(
+                "ozone: set CEDA_TOKEN (docs/global_data.md) or pass --file"
+            )
+        file = fetch(
+            CEDA_OZONE + "?download=1",
+            Path(a.cache),
+            f"Authorization: Bearer {token}",
+        )
+    var = a.var or next(
+        v for v in xr.open_dataset(file).data_vars if "aot40" in v.lower()
+    )
+    climatology(a, str(file), var, a.scale, "ozone", "ppb h", True)
 
 
 def ndep(a: argparse.Namespace) -> None:
-    """Annual N deposition [mg N m-2 yr-1] from a NetCDF that you downloaded; --scale converts the file units."""
-    climatology(a, a.file, a.var, a.scale, "ndep", "mg N m-2 yr-1", False)
+    """Annual N deposition [mg N m-2 yr-1]: ISIMIP3b NHx plus NOy (g N m-2 month-1) averaged over --start..--end, or a NetCDF given by --file."""
+    if a.file:
+        climatology(a, a.file, a.var, a.scale, "ndep", "mg N m-2 yr-1", False)
+        return
+    parts = []
+    for v in ("nhx", "noy"):
+        da = xr.open_dataset(
+            fetch(ISIMIP_NDEP.format(v), Path(a.cache)), decode_times=False
+        )[v]
+        months = (a.end - a.start + 1) * 12
+        first = (a.start - 1850) * 12
+        parts.append(
+            da.isel(time=slice(first, first + months)).sum("time")
+            / (a.end - a.start + 1)
+        )
+    total = (parts[0] + parts[1]) * 1000.0  # g N m-2 to mg N m-2
+    da = (
+        total.assign_coords(lon=((total.lon + 180) % 360) - 180)
+        .sortby("lon")
+        .sortby("lat")
+    )
+    lon, lat = target(a)
+    write(
+        box_mean(da, lon, lat, a.res)
+        .rename("ndep")
+        .assign_attrs(units="mg N m-2 yr-1")
+        .to_dataset(),
+        a,
+        "ndep.nc",
+    )
 
 
 def lulc(a: argparse.Namespace) -> None:
@@ -484,18 +577,32 @@ def main() -> None:
         help="text file with year and ppmv per line for the years after the observations",
     )
     c.set_defaults(f=co2)
-    c = sub.add_parser("fire")
-    c.add_argument("--fire-file", required=True)
-    c.set_defaults(f=fire)
-    for name, f in (("soil", soil), ("elev", elev), ("wind", wind), ("static", static)):
+    for name, f in (
+        ("soil", soil),
+        ("elev", elev),
+        ("wind", wind),
+        ("static", static),
+    ):
         sub.add_parser(name).set_defaults(f=f)
+    for name, f in (("lightning", lightning), ("population", population)):
+        c = sub.add_parser(name)
+        c.add_argument("--file", help="a file you downloaded instead of the default")
+        c.add_argument("--var")
+        c.set_defaults(f=f)
     for name, f in (("ozone", ozone), ("ndep", ndep)):
         c = sub.add_parser(name)
-        c.add_argument("--file", required=True)
-        c.add_argument("--var", required=True)
+        c.add_argument(
+            "--file",
+            help="NetCDF with the data; without it the default source is downloaded",
+        )
+        c.add_argument("--var")
         c.add_argument(
             "--scale", type=float, default=1.0, help="factor from the units of the file"
         )
+        c.add_argument(
+            "--start", type=int, default=2005, help="ndep: first year averaged"
+        )
+        c.add_argument("--end", type=int, default=2014, help="ndep: last year averaged")
         c.set_defaults(f=f)
     c = sub.add_parser("lulc")
     c.add_argument("--luh2", required=True, help="LUH2 states.nc")

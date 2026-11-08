@@ -143,7 +143,9 @@ def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, di
             )
         fields[name] = clim.to_grid(da, lon, lat, cfg["regrid_method"], res).load()
     days = DAILY if daily else MIDMONTH
-    time = np.array([(y - y0) * 365 + d for y in range(y0, y1 + 1) for d in days], dtype=float)
+    time = np.array(
+        [(y - y0) * 365 + d for y in range(y0, y1 + 1) for d in days], dtype=float
+    )
     attrs = {"units": f"days since {y0}-01-01", "calendar": "noleap"}
     out = xr.Dataset(
         {
