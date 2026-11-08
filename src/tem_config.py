@@ -106,7 +106,7 @@ def expand(value: str, base: Path) -> Path:
 
 def load() -> dict:
     """Defaults overlaid with run_config.yaml of the current directory (the case directory)."""
-    os.environ.setdefault("TUP_ROOT", str(ROOT))
+    os.environ.setdefault("TEM_UW_APP_ROOT", str(ROOT))
     case_dir = Path.cwd()
     cfg = yaml.safe_load(DEFAULT_CONFIG.read_text())
     case = yaml.safe_load((case_dir / CASE_FILE).read_text()) or {}
@@ -141,6 +141,10 @@ def load() -> dict:
         raise ValueError(
             "veg_fire needs netcdf_fire_in_file and netcdf_population_in_file"
         )
+    if cfg["run_dt"] != 1 or cfg["run_dt_units"] not in ("month", "day"):
+        raise ValueError("run_dt is 1 and run_dt_units is month or day")
+    if cfg["run_dt_units"] == "day" and cfg["netcdf_climate_in_frequency"] != "daily":
+        raise ValueError("run_dt_units day needs netcdf_climate_in_frequency daily")
     for key in ("n_nodes", "n_cpus", "n_cpus_per_task"):
         if cfg[key] < 1:
             raise ValueError(f"{key} must be at least 1")

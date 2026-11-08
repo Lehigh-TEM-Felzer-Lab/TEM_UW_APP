@@ -101,7 +101,7 @@ def regrid_file(path: Path, cfg: dict, lon: np.ndarray, lat: np.ndarray) -> xr.D
 
 
 def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, dict]:
-    """climate.nc (monthly, noleap) and the time-independent fields wind and elev, if mapped."""
+    """climate.nc (monthly or daily steps, noleap) and the time-independent fields wind and elev, if mapped."""
     res, y0, y1 = cfg["horizontal_resolution"], cfg["start_year"], cfg["end_year"]
     pad = max(2.0, 2 * res)
     ds = clim.open_dataset(
@@ -109,6 +109,9 @@ def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, di
         (lon[0] - pad, lon[-1] + pad, lat[0] - pad, lat[-1] + pad),
         cfg["netcdf_climate_in_frequency"],
     )
+    daily = cfg["run_dt_units"] == "day"
+    nyears = y1 - y0 + 1
+    steps = 365 if daily else 12
     fields = {}
     for name in [*CLIMATE, "wind", "elev"]:
         da = clim.derive(
@@ -124,25 +127,28 @@ def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, di
                     f"varmap cannot supply '{name}' (see config/run_config.yaml)"
                 )
             continue
-        if name in CLIMATE or (name == "wind" and "time" in da.dims):
-            da = clim.monthly(da, name, cfg["netcdf_climate_in_frequency"])
-        if name == "wind" and "time" in da.dims:
-            da = da.groupby("time.month").mean()
-        elif "time" in da.dims:
+        if daily and name in CLIMATE:
             da = da.sel(time=slice(f"{y0}-01-01", f"{y1}-12-31"))
-            if da.time.size != 12 * (y1 - y0 + 1):
-                raise ValueError(
-                    f"{name}: {da.time.size} months found, {12 * (y1 - y0 + 1)} needed"
-                )
+            da = da.sel(time=~((da.time.dt.month == 2) & (da.time.dt.day == 29)))
+        else:
+            if name in CLIMATE or (name == "wind" and "time" in da.dims):
+                da = clim.monthly(da, name, cfg["netcdf_climate_in_frequency"])
+            if name == "wind" and "time" in da.dims:
+                da = da.groupby("time.month").mean()
+            elif "time" in da.dims:
+                da = da.sel(time=slice(f"{y0}-01-01", f"{y1}-12-31"))
+        if name in CLIMATE and da.time.size != steps * nyears:
+            raise ValueError(
+                f"{name}: {da.time.size} steps found, {steps * nyears} needed"
+            )
         fields[name] = clim.to_grid(da, lon, lat, cfg["regrid_method"], res).load()
-    time = np.array(
-        [(y - y0) * 365 + d for y in range(y0, y1 + 1) for d in MIDMONTH], dtype=float
-    )
+    days = DAILY if daily else MIDMONTH
+    time = np.array([(y - y0) * 365 + d for y in range(y0, y1 + 1) for d in days], dtype=float)
     attrs = {"units": f"days since {y0}-01-01", "calendar": "noleap"}
     out = xr.Dataset(
         {
             n: (("time", "lat", "lon"), fields[n].values, {"units": u})
-            for n, u in CLIMATE.items()
+            for n, u in {**CLIMATE, "prec": "mm" if daily else CLIMATE["prec"]}.items()
         },
         coords={"time": ("time", time, attrs), "lat": lat, "lon": lon},
     )
@@ -150,6 +156,7 @@ def climate(cfg: dict, lon: np.ndarray, lat: np.ndarray) -> tuple[xr.Dataset, di
 
 
 MIDMONTH = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]
+DAILY = [d + 0.5 for d in range(365)]
 
 
 def write_config(cfg: dict, present: set[str]) -> None:

@@ -11,11 +11,11 @@ lat_max: 43.0
 start_year: 2015
 end_year: 2099
 
-netcdf_climate_in_file: $TUP_ROOT/examples/west/climate_ccsm4_rcp85.nc
+netcdf_climate_in_file: $TEM_UW_APP_ROOT/examples/west/climate_ccsm4_rcp85.nc
 netcdf_climate_in_frequency: monthly
-netcdf_static_in_file: $TUP_ROOT/examples/west/static.nc
-netcdf_lulc_in_file: $TUP_ROOT/examples/west/lulc.nc
-netcdf_co2_in_file: $TUP_ROOT/examples/west/co2.nc
+netcdf_static_in_file: $TEM_UW_APP_ROOT/examples/west/static.nc
+netcdf_lulc_in_file: $TEM_UW_APP_ROOT/examples/west/lulc.nc
+netcdf_co2_in_file: $TEM_UW_APP_ROOT/examples/west/co2.nc
 varmap: {tair: tair, dtr: dtr, prec: prec, nirr: nirr, vpr: vpr, wind: wind, elev: elev}
 
 de_nyears: 40

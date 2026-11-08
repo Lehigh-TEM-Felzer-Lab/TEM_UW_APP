@@ -459,6 +459,7 @@ def static(a: argparse.Namespace) -> None:
     parts = [
         xr.open_dataset(Path(a.out) / f)
         for f in ("elev.nc", "soil.nc", "wind.nc", "ozone.nc", "ndep.nc")
+        if (Path(a.out) / f).exists()
     ]
     ds = xr.merge(parts)
     ds.to_netcdf(Path(a.out) / "static.nc")

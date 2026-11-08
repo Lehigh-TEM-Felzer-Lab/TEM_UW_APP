@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(os.environ.get("TUP_ROOT", Path(__file__).resolve().parent.parent))
+ROOT = Path(os.environ.get("TEM_UW_APP_ROOT", Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(ROOT / "src"))
 
 import tem_config
@@ -42,7 +42,7 @@ def main() -> int:
     except (KeyError, ValueError, FileNotFoundError) as error:
         sys.exit(f"Invalid {tem_config.CASE_FILE}: {error}")
 
-    env = {**os.environ, "TUP_ROOT": str(ROOT), "TUP_MODULES": " ".join(cfg["modules"])}
+    env = {**os.environ, "TEM_UW_APP_ROOT": str(ROOT), "TEM_UW_APP_MODULES": " ".join(cfg["modules"])}
     if cfg["run_mode"] == "local":
         return subprocess.run(
             ["bash", str(ROOT / "launchers" / "case_run.sh")], env=env, check=False

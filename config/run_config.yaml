@@ -76,7 +76,9 @@ lon_max: null # REQUIRED
 lat_min: null # REQUIRED
 lat_max: null # REQUIRED
 regrid_method: box_mean # box_mean (area average, when the source is finer) | bilinear | nearest. Categorical fields always use nearest.
-start_year: null # First year of the transient run (REQUIRED); the model runs monthly
+run_dt: 1 # Model time step, 1
+run_dt_units: month # month | day. day needs daily forcing (netcdf_climate_in_frequency: daily) and a build with room for 365 steps (make daily)
+start_year: null # First year of the transient run (REQUIRED)
 end_year: null # Last year of the transient run (REQUIRED)
 
 # -----------------------------------------------------------------------------

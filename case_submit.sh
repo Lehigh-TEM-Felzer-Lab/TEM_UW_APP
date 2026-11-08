@@ -6,7 +6,7 @@
 
 conda deactivate >/dev/null 2>&1
 
-TUP_ROOT="$(cd "$(dirname "$0")" && pwd)"
-export TUP_ROOT
+TEM_UW_APP_ROOT="$(cd "$(dirname "$0")" && pwd)"
+export TEM_UW_APP_ROOT
 
-"$TUP_ROOT/launchers/case_submit.py"
+"$TEM_UW_APP_ROOT/launchers/case_submit.py"

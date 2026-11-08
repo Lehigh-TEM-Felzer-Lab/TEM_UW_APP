@@ -25,14 +25,14 @@ conda env create -f env.yaml && conda activate tem_uw_app
 git clone https://github.com/Lehigh-TEM-Felzer-Lab/TEM_2026
 make -C TEM_2026 -j4                  # serial: build/xtem
 make -C TEM_2026 mpi -j4              # MPI, for n_cpus > 1: build_mpi/xtem
-export TUP_ROOT=$PWD
+export TEM_UW_APP_ROOT=$PWD
 ```
 
 # Running a case
 
 1. Copy `examples/west/run_config.yaml` to an empty directory.
 2. Set `tem_src` (the TEM_2026 checkout), the climate files, the box and the years. For `n_cpus > 1` set `tem_exe: "{tem_src}/build_mpi/xtem"`.
-3. Run `$TUP_ROOT/case_submit.sh` from that directory. With `run_mode: slurm` it submits with sbatch; with `run_model: false` it only builds the case.
+3. Run `$TEM_UW_APP_ROOT/case_submit.sh` from that directory. With `run_mode: slurm` it submits with sbatch; with `run_model: false` it only builds the case.
 
 ```
 run_config.yaml   tem_config.yaml
@@ -79,6 +79,10 @@ Ozone, N deposition and the fire files come from files you supply (`ozone`, `nde
 units and the land-cover assumptions are in [docs/global_data.md](docs/global_data.md). Files of older TEM versions are converted as in
 [docs/converting.md](docs/converting.md). Then set the `netcdf_*_in_file` keys of `run_config.yaml` to the files.
 
+# Test
+
+`python tools/run_test.py` is one file that clones TEM_2026 and TEM_UW_APP, builds the model, downloads ERA5 (needs `~/.cdsapirc` and `cdsapi`) and the static data, makes a global 1 degree case for one year and runs it monthly and daily. Flags such as `--competition`, `--fire`, `--all` add cases; `python tools/run_test.py -h` lists them and the docstring describes the work directory, the archive and the placeholders for ozone and N deposition.
+
 # Documentation
 
 | File | Content |
@@ -90,6 +94,6 @@ units and the land-cover assumptions are in [docs/global_data.md](docs/global_da
 
 # Limits
 
-- The app writes monthly forcing, so it runs `run_dt: 1`, `run_dt_units: month` and rejects other steps. Daily forcing is not generated.
+- The app writes monthly or daily forcing (`run_dt_units: month` or `day`; daily needs `netcdf_climate_in_frequency: daily` and a TEM_2026 build from `make daily`). Daily physics is not validated.
 - Tested on the western United States example only; the inputs the app writes for it are identical to those shipped with TEM_2026.
 - The global land-cover builder is not validated against the lab's earlier inputs.
