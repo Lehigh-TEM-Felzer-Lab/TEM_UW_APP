@@ -173,61 +173,45 @@ def derive(
     return None
 
 
-def to_step(da: xr.DataArray, name: str, frequency: str, step: str) -> xr.DataArray:
-    """Values on the TEM time step (monthly or daily) in TEM units.
-
-    Precipitation becomes mm per month or mm per day. Daily data cannot be built from monthly data.
-    """
-    if name == "elev" or "month" in da.dims:
+def monthly(da: xr.DataArray, name: str, frequency: str) -> xr.DataArray:
+    """Values per month in TEM units; precipitation becomes mm per month."""
+    if name == "elev" or "month" in da.dims or frequency == "monthly":
         return da
-    freq = {"monthly": "MS", "daily": "D"}[step]
-    if step == "daily" and frequency == "monthly":
-        raise ValueError(
-            f"{name}: the core needs daily values but netcdf_input_frequency is monthly"
-        )
-    same = frequency == step
     if name == "prec":
         if da.attrs["kind"] == "amount":
-            out = da if same else da.resample(time=freq).sum()
-        else:
-            out = da if same else da.resample(time=freq).mean()
-            if step == "monthly":
-                out = out * out.time.dt.days_in_month
-    else:
-        out = da if same else da.resample(time=freq).mean()
-    period = {"monthly": "M", "daily": "D"}[step]
-    return out.assign_coords(time=out.time.to_index().to_period(period).to_timestamp())
+            return da.resample(time="MS").sum()
+        out = da.resample(time="MS").mean()
+        return out * out.time.dt.days_in_month
+    return da.resample(time="MS").mean()
 
 
-def to_cells(
-    da: xr.DataArray, cells: pd.DataFrame, resolution: float, method: str
+def to_grid(
+    da: xr.DataArray, lon: np.ndarray, lat: np.ndarray, method: str, resolution: float
 ) -> xr.DataArray:
-    """Regrid to the cell centres: dimension 'cell' replaces lat and lon."""
-    lon_c = xr.DataArray(cells["lon"].values, dims="cell")
-    lat_c = xr.DataArray(cells["lat"].values, dims="cell")
+    """Regrid to the model grid. box_mean averages the source cells inside each target cell (area
+    weighted) when the source is finer; otherwise bilinear or nearest."""
+    if method == "nearest" or abs(source_res(da) - resolution) < 1e-6:
+        return da.sel(lon=lon, lat=lat, method="nearest", tolerance=resolution / 2)
     if method == "box_mean" and source_res(da) < resolution * 0.99:
         half = resolution / 2
-        w_lon = ((da.lon - lon_c >= -half) & (da.lon - lon_c < half)).astype(float)
-        w_lat = ((da.lat - lat_c >= -half) & (da.lat - lat_c < half)).astype(
-            float
-        ) * np.cos(np.deg2rad(da.lat))
-        valid = da.notnull()
-        num = xr.dot(da.fillna(0.0), w_lat, w_lon, dim=["lat", "lon"])
-        den = xr.dot(valid.astype(float), w_lat, w_lon, dim=["lat", "lon"])
-        return (num / den.where(den > 0)).assign_coords(lon=lon_c, lat=lat_c)
-    if method == "nearest" or abs(source_res(da) - resolution) < 1e-6:
-        return da.sel(lon=lon_c, lat=lat_c, method="nearest", tolerance=resolution / 2)
-    return da.interp(lon=lon_c, lat=lat_c, method="linear")
+        dlat = da.lat.values[None, :] - lat[:, None]
+        dlon = da.lon.values[None, :] - lon[:, None]
+        wlat = xr.DataArray(
+            ((dlat >= -half) & (dlat < half))
+            * np.cos(np.deg2rad(da.lat.values))[None, :],
+            dims=("tlat", "lat"),
+        )
+        wlon = xr.DataArray(
+            ((dlon >= -half) & (dlon < half)) * 1.0, dims=("tlon", "lon")
+        )
+        num = xr.dot(da.fillna(0.0), wlat, wlon, dim=["lat", "lon"])
+        den = xr.dot(da.notnull().astype(float), wlat, wlon, dim=["lat", "lon"])
+        out = (num / den.where(den > 0)).rename(tlat="lat", tlon="lon")
+        return out.assign_coords(lat=lat, lon=lon)
+    return da.interp(lon=lon, lat=lat, method="linear")
 
 
 def source_res(da: xr.DataArray) -> float:
     return (
         float(np.median(np.abs(np.diff(da.lon.values)))) if da.lon.size > 1 else np.inf
     )
-
-
-def cell_area_km2(lat: np.ndarray, resolution: float) -> np.ndarray:
-    """Area (km2) of a resolution-degree cell centred on lat."""
-    radius = 6371.0
-    lat1, lat2 = np.deg2rad(lat - resolution / 2), np.deg2rad(lat + resolution / 2)
-    return radius**2 * np.deg2rad(resolution) * (np.sin(lat2) - np.sin(lat1))

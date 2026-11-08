@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Submit a TUP preprocessing case to SLURM (or run it in the foreground).
+"""Submit a TEM_UW_APP case to SLURM (or run it in the foreground).
 
 Submission chain
 ----------------
@@ -12,17 +12,11 @@ Submission chain
 Usage
 -----
 Run ``case_submit.sh`` without arguments from the case directory, the directory
-that holds the case-local ``run_config.yaml``. The model inputs (``INPUT/``), the
-empty ``HIST/`` and ``OUTPUT/`` directories, ``tem_config.xml``, ``tem_in.txt`` and
-the log (``logs/``) are created there. Nothing is read from the repository copy of
-``config/run_config.yaml`` except the defaults and the list of valid keys.
+that holds the case-local ``run_config.yaml``. INPUT/, OUTPUT/ and
+``tem_config.yaml`` are created there.
 
-What this script does
----------------------
-1. Reads ``<cwd>/run_config.yaml`` and rejects any key that is not in
-   ``config/run_config.yaml``. Unset keys take the default value.
-2. Submits ``sbatch.sh`` from the case directory (``run_mode: slurm``), or runs
-   the preprocessing in the foreground (``run_mode: local``).
+``run_mode: local`` runs in the foreground, ``slurm`` submits ``sbatch.sh``.
+Keys not in ``config/run_config.yaml`` are rejected.
 """
 
 import os
@@ -58,7 +52,7 @@ def main() -> int:
         "sbatch",
         f"--job-name={cfg['case_name']}",
         "--nodes=1",
-        "--ntasks=1",
+        f"--ntasks={cfg['mpi_tasks']}",
         f"--mem={cfg['mem']}g",
         f"--time={cfg['walltime']}:00:00",
         f"--output={case_dir}/slurm-%j.out",

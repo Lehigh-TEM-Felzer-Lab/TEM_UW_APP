@@ -1,12 +1,13 @@
-# Western USA example: 2015-2099 monthly CCSM4 RCP8.5 climate on a 0.5 degree grid.
-# Copy to an empty work directory, point params_dir at the parameter files of the core, run case_submit.sh.
-core: tem_monthly               # profile name in profiles/, or a path to your own profile
-params_dir: /path/to/params  # directory holding the .ecd/.dat files named by the core template
-static_dir: $TUP_ROOT/examples/west/static
+# Western USA example: monthly CCSM4 RCP8.5 climate 2015-2099 on a 0.5 degree grid.
+# Copy to an empty directory, set tem2026_dir, run case_submit.sh from there.
+tem2026_dir: /path/to/TEM_2026 # checkout built with cmake (build/xtem)
 netcdf_input_file: $TUP_ROOT/examples/west/climate_ccsm4_rcp85.nc
 netcdf_input_frequency: monthly
 netcdf_varmap: {tair: tair, dtr: dtr, prec: prec, nirr: nirr, vpr: vpr, wind: wind, elev: elev}
-resolution: 0.5
+static_file: $TUP_ROOT/examples/west/static.nc
+lulc_file: $TUP_ROOT/examples/west/lulc.nc
+co2_file: $TUP_ROOT/examples/west/co2.nc
+horizontal_resolution: 0.5
 lon_min: -124.5
 lon_max: -123.5
 lat_min: 40.0
@@ -14,7 +15,19 @@ lat_max: 43.0
 region: WESTERN_USA
 start_year: 2015
 end_year: 2099
-tem:                         # the example static files hold one year, so switch off the transient modes
-  xto3flag: 0
-  xtndepflag: 0
-  tlulcflag: 0
+tem: # keys of tem_config.yaml; the others keep the TEM_2026 template values
+  de_nyears: 40
+  grdcnt: 1
+  initco2: 303.0
+  xco2level: 303.0
+  ctol: 5.0
+  ntol: 1.0
+  equil_max_years: 10000
+  nclmout: 1
+  clmoutvars: TAIR
+  ntemout: 1
+  temoutvars: GPP
+  istateyear: 0
+  ostateflag: 1
+  ostatefile: ./OUTPUT/state_eq.nc
+  ostateyear: 1997

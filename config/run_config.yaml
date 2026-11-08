@@ -1,101 +1,52 @@
-# =============================================================================
-# TUP Run Configuration (TEM Unified Preprocessor)
-# NetCDF climate + YAML -> the directory structure and input files of a TEM case.
-# =============================================================================
-# The launcher reads the case-local run_config.yaml from the submission
-# directory and fills any unset key from this default file. Unknown keys are
-# rejected at submission time, so keep case files aligned with the keys below.
-# Relative paths are relative to the case directory; $TUP_ROOT and other
-# environment variables are expanded.
+# TEM_UW_APP run configuration. Copy to the case directory as run_config.yaml and edit; keys you do not
+# set take the values below, unknown keys are rejected. Relative paths are relative to the case
+# directory; environment variables are expanded.
 #
-# Sections (functional order):
-#   0. Job environment
-#   1. TEM core
-#   2. Grid and time
-#   3. NetCDF input file and variable map
-#   4. Static inputs
-# =============================================================================
+# The app builds the NetCDF inputs and tem_config.yaml of TEM_2026 from your data, then runs the model.
 
-# -----------------------------------------------------------------------------
-# 0. JOB ENVIRONMENT
-# -----------------------------------------------------------------------------
-
+# Job
 case_name: null # SLURM job name; null uses the name of the case directory
 run_mode: local # local: run in the foreground | slurm: submit with sbatch
-modules: [] # Host modules loaded before preprocessing (slurm only)
-walltime: 1 # Hours
+run_model: true # false: only build the case
+mpi_tasks: 1 # processes; more than 1 needs TEM_2026 built with -DUSE_MPI=ON
+modules: [] # modules loaded before the run (slurm)
+walltime: 1 # hours
 partition: null
 account: null
 mem: 8 # GB
-sbatch_options: "" # Extra sbatch flags, for example "--mail-type=END"
+sbatch_options: "" # extra sbatch flags, for example "--mail-type=END"
 
-# -----------------------------------------------------------------------------
-# 1. TEM CORE
-# -----------------------------------------------------------------------------
-# core selects the profile in profiles/ that describes the TEM core you will run:
-# its climate file layout (monthly rows or daily rows), XML template and tag names.
-# Give a profile name (tem_monthly, tem_competition_monthly,
-# tem_daily) or the path of your own profile YAML for a core that is not listed.
+# TEM_2026 checkout: provides templates/tem_config.yaml and params/, and build/xtem
+tem2026_dir: null # REQUIRED
+tem_exe: null # null: <tem2026_dir>/build/xtem
+tem: # any tem_config.yaml key to set, for example {veg_fire: 1, fire_mode: 1, fire_topography: 1, xnfertflag: 1, xtws10flag: 1}
 
-core: null # Profile name or path to a profile YAML (REQUIRED)
-params_dir: null # Directory with the .ecd and .dat files the XML names; null uses $TUP_ROOT/params/<core>; linked to INPUT/params
-tem: # Any XML tag to set; replaces the value of the template
-keep_hist: false # case_convert.sh deletes HIST/ after the NetCDF files are written unless true
-tem_outputs: null # TEM output variables (list); null keeps the list of the XML template
+# Grid and time (the core does no regridding; this app does it)
+horizontal_resolution: 0.5 # degrees
+lon_min: null # REQUIRED
+lon_max: null
+lat_min: null
+lat_max: null
+region: TEM
+regrid_method: box_mean # box_mean (area average, when the source is finer) | bilinear | nearest
+start_year: null # REQUIRED
+end_year: null # REQUIRED
 
-# -----------------------------------------------------------------------------
-# 2. GRID AND TIME
-# -----------------------------------------------------------------------------
-# The cells are the points of the box on the resolution grid that have a valid
-# elevation in the NetCDF file. They are written to INPUT/grids.csv.
+# Climate: one path, a glob or a list; merged by coordinates. Units come from the "units" attribute.
+#   tair   or tmin + tmax        dtr   or tmin + tmax      prec    nirr
+#   vpr    or dewpoint or huss (+ ps)
+#   wind   or u10 + v10          elev  (optional here; may be in static_file)
+netcdf_input_file: null # REQUIRED
+netcdf_input_frequency: monthly # hourly | daily | monthly
+netcdf_varmap: # TEM input: variable in the file
+surface_pressure_hpa: 1013.25 # for vpr from huss when ps is not in netcdf_varmap
 
-resolution: 0.5 # Model grid spacing in degrees (any value, for example 0.25, 0.5, 1.0)
-lon_min: null # Western edge, degrees east (REQUIRED)
-lon_max: null # Eastern edge (REQUIRED)
-lat_min: null # Southern edge (REQUIRED)
-lat_max: null # Northern edge (REQUIRED)
-region: TEM # Region label written in the TEM input files
-regrid_method: box_mean # box_mean (area average) | bilinear | nearest
-start_year: null # First transient year (REQUIRED)
-end_year: null # Last transient year (REQUIRED)
-
-# -----------------------------------------------------------------------------
-# 3. NETCDF INPUT FILE AND VARIABLE MAP
-# -----------------------------------------------------------------------------
-# One path, a glob, or a list of paths and globs; the files are merged by
-# coordinates (xarray.open_mfdataset). netcdf_varmap names the variable for each
-# TEM input; units are read from the "units" attribute and converted with MetPy.
-#
-#   netcdf_varmap:
-#     tair: t2m
-#     prec: tp
-#
-# TEM input   Alternatives                       Units accepted (any pint unit of the kind)
-#   tair      tmin + tmax                        K, degC
-#   dtr       tmin + tmax (tmax - tmin)          K, degC (a difference)
-#   prec      -                                  rate (mm/day, m s-1, kg m-2 s-1) or amount per step (mm, m, mm month-1)
-#   nirr      -                                  W m-2, J m-2 day-1 (rate) or J m-2 (energy per step)
-#   vpr       dewpoint | huss (+ ps)             hPa, Pa | K, degC | kg kg-1 (+ Pa)
-#   wind      u10 + v10                          m s-1; dimension month (climatology) or time
-#   elev      -                                  m; dimensions lat and lon only
-
-netcdf_input_file: null # Path, glob or list (REQUIRED)
-netcdf_input_frequency: monthly # Time step of the time-dependent variables: hourly | daily | monthly
-netcdf_varmap:
-surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in netcdf_varmap
-
-# -----------------------------------------------------------------------------
-# 4. STATIC INPUTS
-# -----------------------------------------------------------------------------
-# TEM files of the domain. Relative names are taken in static_dir. The per-cell CSV
-# files must cover every cell of the grid (more cells are allowed); the cells of the
-# grid are written to INPUT/static/ (or the file is linked when it already matches).
-# Only the files the profile uses are read.
-
-static_dir: null # Directory with the static files of the domain; null uses $TUP_ROOT/static
-texture_file: texture.csv # Soil texture
-ozone_file: ozone.csv # AOT40
-ndep_file: ndep.csv # Nitrogen deposition
-co2_file: co2.data # Atmospheric CO2 by year
-max_cohorts_file: mxcohort.csv # Maximum number of cohorts per cell
-cohorts_file: cohort.csv # Land cover cohorts
+# Other inputs, NetCDF with the variable names of TEM_2026 docs/data.md (rename with tem_varmap).
+# Categorical variables (lulc, mxcohort, ...) are regridded with nearest, the rest with regrid_method.
+static_file: null # elev, sand, silt, clay, ndep, mxcohort (lat,lon); wind, ozone (month,lat,lon)
+lulc_file: null # land cover, (cohort,lat,lon)
+co2_file: null # co2 (time), annual
+fire: # used when tem: {veg_fire: 1}
+  flashes_file: null # lightning flashes km-2 month-1 (12 months, lat, lon)
+  popdens_file: null # population density km-2 (lat, lon)
+tem_varmap: # model input key (varmap block of tem_config.yaml) : variable name in your file
