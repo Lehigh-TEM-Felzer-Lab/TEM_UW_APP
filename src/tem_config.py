@@ -30,7 +30,6 @@ MODEL_KEYS = {
     "wind",
     "elev",
     "texture",
-    "mxcohort",
     "lulc",
     "co2",
     "ozone",

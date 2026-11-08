@@ -23,7 +23,6 @@ CLIMATE = {
     "vpr": "hPa",
 }
 NEAREST = {
-    "mxcohort",
     "lulc",
     "chrtarea",
     "potveg",
@@ -43,7 +42,7 @@ INT_VARS = NEAREST - {"lulc", "chrtarea"} | {
 
 
 def save(ds: xr.Dataset, path: Path) -> set[str]:
-    """Write with float32 for floats (coordinates too) and int64 for the categorical fields."""
+    """Write with float32 for floats (coordinates too), int64 for the categorical fields and the cohort axis."""
     enc = {}
     for k in ds.data_vars:
         if k in INT_VARS:
@@ -54,6 +53,10 @@ def save(ds: xr.Dataset, path: Path) -> set[str]:
     ds = ds.assign_coords(
         {k: ds[k].astype("float32") for k in ("lat", "lon") if k in ds.coords}
     )
+    if "cohort" in ds.dims:
+        ds = ds.assign_coords(
+            cohort=np.arange(1, ds.sizes["cohort"] + 1, dtype="int64")
+        )
     ds.to_netcdf(path, encoding=enc)
     return set(ds.data_vars)
 

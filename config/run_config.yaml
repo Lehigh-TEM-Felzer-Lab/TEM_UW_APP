@@ -88,7 +88,7 @@ end_year: null # Last year of the transient run (REQUIRED)
 
 netcdf_climate_in_file: null # Climate (REQUIRED), merged by coordinates; units come from the "units" attribute
 netcdf_climate_in_frequency: monthly # hourly | daily | monthly, the time step of netcdf_climate_in_file
-netcdf_static_in_file: null # elev, sand, silt, clay, ndep, mxcohort (lat, lon); wind, ozone (month, lat, lon)
+netcdf_static_in_file: null # elev, sand, silt, clay, ndep (lat, lon); wind, ozone (month, lat, lon)
 netcdf_lulc_in_file: null # Land cover, (cohort, lat, lon); the fields of TEM_2026 docs/data.md
 netcdf_co2_in_file: null # co2 (time), annual
 netcdf_fire_in_file: null # lightning_flashes, km-2 month-1 (12 months, lat, lon); needed when veg_fire is 1
@@ -100,7 +100,7 @@ surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
 #   climate (REQUIRED, derived to TEM units):  tair or tmin + tmax;  dtr or tmin + tmax;  prec;  nirr;
 #       vpr or dewpoint or huss (+ ps)
 #   optional from the climate files:  wind or u10 + v10;  elev
-#   passed to the model for the other files:  texture (sand+silt+clay), mxcohort, lulc, co2, ozone,
+#   passed to the model for the other files:  texture (sand+silt+clay), lulc, co2, ozone,
 #       ndep, wind, elev, lightning, popdens, nfertcrop, nfertpasture, mask
 varmap: {}
 
