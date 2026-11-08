@@ -40,9 +40,7 @@ REPOS = {
     "TEM_2026": "TEM_2026",
     "TEM_UW_APP": "TEM_UW_APP",
 }
-LUH2 = "https://luh.umd.edu/LUH2/LUH2_v2h"
 YEAR = 2019  # a year without 29 February
-LUH2_YEAR = 2015  # last year of LUH2 v2h states
 BOX = {"lon_min": -180.0, "lon_max": 179.0, "lat_min": -89.0, "lat_max": 89.0}
 OZONE = 0.0  # placeholder AOT40 [ppb h]
 NDEP = 1000.0  # placeholder N deposition [mg N m-2 yr-1]
@@ -191,19 +189,6 @@ def era5(work: Path) -> Path:
     return out
 
 
-def fetch(url: str, dest: Path) -> Path:
-    if not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        part = dest.with_name(dest.name + ".part")
-        for _ in range(10):
-            if sh(["wget", "-q", "-c", "-O", str(part), url]) == 0:
-                part.rename(dest)
-                break
-        else:
-            sys.exit(f"download failed: {url}")
-    return dest
-
-
 def static_data(work: Path, args: argparse.Namespace) -> Path:
     """data/: co2, elev, soil, wind, ozone, ndep, static, lulc, flash and popdens at the model grid, all made here."""
     data, app = work / "data", work / "repos" / "TEM_UW_APP"
@@ -272,23 +257,8 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
             ).to_netcdf(data / f"{name}.nc")
     if not (data / "static.nc").exists() and make("static"):
         sys.exit("data step failed: static (logs/data_static.log)")
-    if not (data / "lulc.nc").exists():
-        say("data: lulc (LUH2, 6 GB)")
-        states = fetch(f"{LUH2}/states.nc", work / "downloads" / "states.nc")
-        static = fetch(
-            f"{LUH2}/staticData_quarterdeg.nc",
-            work / "downloads" / "staticData_quarterdeg.nc",
-        )
-        if make(
-            "lulc",
-            "--luh2",
-            str(states),
-            "--luh2-static",
-            str(static),
-            "--year",
-            str(LUH2_YEAR),
-        ):
-            sys.exit("data step failed: lulc (logs/data_lulc.log)")
+    if not (data / "lulc.nc").exists() and make("lulc"):
+        sys.exit("data step failed: lulc (logs/data_lulc.log)")
     return data
 
 
