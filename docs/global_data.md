@@ -1,26 +1,45 @@
 # Global input data
 
-`src/make_global_inputs.py` writes the input files of TEM_2026 for any box and resolution (run it from the root of TEM_UW_APP).
-The commands below are for a 0.5 degree box over the western United States.
+`src/gen_static_inputs.py` writes the input files of TEM_2026 for any bounding box and resolution (run it from the root of TEM_UW_APP).
+The commands below are for a 0.5 degree box over the western United States; `--bbox` takes `LON_MIN LON_MAX LAT_MIN LAT_MAX` and defaults to the globe.
 Needs `pip install xarray netcdf4 pandas scipy rioxarray` and `wget`.
 
 ```bash
-A="--out INPUT --cache downloads --lon-min -125 --lon-max -110 --lat-min 32 --lat-max 49 --res 0.5"
-python src/make_global_inputs.py $A co2 --start 2015 --end 2024
-python src/make_global_inputs.py $A soil
-python src/make_global_inputs.py $A elev
-python src/make_global_inputs.py $A wind
-python src/make_global_inputs.py $A population
-python src/make_global_inputs.py $A ndep --start 2005 --end 2014
-EARTHDATA_TOKEN=<token> python src/make_global_inputs.py $A lightning   # NASA login, see below
-CEDA_TOKEN=<token> python src/make_global_inputs.py $A ozone
-python src/make_global_inputs.py $A static
-python src/make_global_inputs.py $A lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
+A="--out INPUT --cache downloads --bbox -125 -110 32 49 --res 0.5"
+python src/gen_static_inputs.py $A co2 --start 2015 --end 2024
+python src/gen_static_inputs.py $A all --year 2015 --cohorts natural crops pasture --min-area 1
 ```
 
+`all` writes `elev.nc`, `soil.nc`, `wind.nc`, `ozone.nc`, `ndep.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc`; the ozone and lightning steps are skipped with a message if their login is missing
+(`CEDA_TOKEN`, `EARTHDATA_TOKEN`, see below). Each step can also be run alone (`soil`, `elev`, `wind`, `ndep --start 2005 --end 2014`, `ozone`, `lightning`, `population`, `static`, `lulc`).
+`--cohorts` keeps only the listed cohorts (`natural`, `crops`, `pasture`; the cohort dimension of `lulc.nc` follows the order given here) and `--min-area` drops cohorts smaller than that area in a cell (km2).
+LUH2 (6 GB) is downloaded unless `--luh2` and `--luh2-static` point to local copies.
+
 Every step downloads its source into `--cache` once. `tools/run_test.py` runs all of them for the globe at 1 degree.
-`static` merges the elevation, soil, wind, ozone and N deposition files into `static.nc`. `climate.nc` is made by the app from ERA5, MACA, gridMET or CMIP output.
+`static` merges the elevation, soil, wind, ozone and N deposition files into `static.nc`. The app makes `climate.nc` from climate files such as those of `src/gen_climate_inputs.py` (see Climate forcing).
 The regridding is the mean of the source cells in a target cell, so the target should be coarser than the source.
+
+## Climate forcing
+
+```bash
+python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000 --end 2019 era5      # needs ~/.cdsapirc
+python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000 --end 2019 gridmet
+python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000 --end 2099 maca --model BNU-ESM --scenario rcp85
+python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000 --end 2099 cmip6 --model MPI-ESM1-2-HR --scenario ssp245
+```
+
+Each source writes `climate_<source>.nc` (daily, `tmin`, `tmax`, `prec`, `nirr`, and `dewpoint` or `huss`; `tair` for ERA5 and CMIP6) with the units of the source, and `varmap_<source>.yaml`.
+Set `netcdf_climate_in_file` and `netcdf_climate_in_frequency: daily` and paste the varmap into `run_config.yaml`; the app converts the units and averages to months.
+
+| Source | Data | Access |
+|---|---|---|
+| `era5` | ERA5 daily statistics, 0.25 degree, global (Hersbach et al. 2020) | Copernicus CDS dataset `derived-era5-single-levels-daily-statistics`; `--grid 1.0/1.0` requests a coarser grid |
+| `gridmet` | gridMET, 4 km, conterminous United States, from 1979 (Abatzoglou 2013) | OPeNDAP at reacchpna.org, variables `tmmx`, `tmmn`, `pr`, `srad`, `sph` |
+| `maca` | MACAv2-METDATA, 4 km, conterminous United States, 1950-2099 (Abatzoglou and Brown 2012) | OPeNDAP at reacchpna.org; `--model`, `--scenario rcp45` or `rcp85`, `--member` (default `r1i1p1`) |
+| `cmip6` | CMIP6 daily output, model grid (Eyring et al. 2016) | Pangeo Google Cloud archive (`pip install gcsfs zarr`); `--model`, `--scenario` (for example `ssp245`) for years after 2014, `--member` |
+
+The gridMET, MACA and CMIP6 downloads were tested on a 2 x 2 degree box for 2013 and 2014 and the app converted their units. The ERA5 request needs a CDS account and was not run here.
+The files for nitrogen fertilizer and for yearly land-cover change are not generated.
 
 ## Sources
 
@@ -54,9 +73,9 @@ wget https://luh.umd.edu/LUH2/LUH2_v2h/staticData_quarterdeg.nc
 ```
 
 The `ndep` step (downloaded file, units and the 1 degree result), the `lightning` step on a synthetic file and the `population` step on a synthetic raster were tested, as were the CO2, soil, elevation and wind steps.
-The LIS/OTD file `LISOTD_HRMC_V2.3.2015.nc` is found by the script: it tries the open GHRC archive and then the links that NASA CMR lists for the collection. NASA now serves it only after a free Earthdata Login
-(https://urs.earthdata.nasa.gov): set `EARTHDATA_TOKEN` (profile, Generate Token) or put the login in `~/.netrc` (`machine urs.earthdata.nasa.gov login <user> password <password>`). The file could not be downloaded without that login,
-so the step was tested on a synthetic file with the layout of the product table (variable `HRMC_COM_FR`, 12 x 720 x 360, flashes km-2 day-1); the real file may differ in dimension order, which the script resolves by size. The WorldPop step was not run on the full 830 MB raster.
+The LIS/OTD file `LISOTD_HRMC_V2.3.2015.nc` is found by the script: it tries the open GHRC archive and then the links that NASA CMR lists for the collection. NASA serves it only after a free Earthdata Login (EDL).
+If the download fails, get an EDL token at https://urs.earthdata.nasa.gov (profile, Generate Token) and set `EARTHDATA_TOKEN`, or put the login in `~/.netrc` (`machine urs.earthdata.nasa.gov login <user> password <password>`). The file could not be downloaded without that login,
+so the step was tested on a synthetic file with the layout of the product table (variable `HRMC_COM_FR`, 12 x 720 x 360, flashes km-2 day-1); the real file may differ in dimension order, which the script resolves by size. The WorldPop header (EPSG:4326, 0.0083 degree, float32, nodata -3.4e38) was read from the full 830 MB raster and a 20 x 10 degree box was aggregated.
 The LUH2 step was tested on a synthetic file, not on the downloaded `states.nc`.
 Scenario CO2 after the observed years is not downloaded; pass a file with one `year ppmv` pair per line to `co2 --scenario`
 (see https://esgf-node.llnl.gov/projects/input4mips/).
@@ -99,9 +118,13 @@ The layouts of all files are in `docs/io_structure.md` of TEM_2026.
 
 ## References
 
+- Abatzoglou, J. T. (2013) Int. J. Climatol. 33, 121-131. https://doi.org/10.1002/joc.3413
+- Abatzoglou, J. T. and Brown, T. J. (2012) Int. J. Climatol. 32, 772-780. https://doi.org/10.1002/joc.2312
 - Cecil, D. J., Buechler, D. E. and Blakeslee, R. J. (2014) Atmos. Res. 135-136, 404-414. https://doi.org/10.1016/j.atmosres.2012.06.028
 - Evans, M. J. and Sofen, E. D. (2016) Gridded Global Surface Ozone Metrics data (1971-2015), version 2.7. CEDA. https://doi.org/10.5285/897a3958-5bfc-4311-9bb0-01134bf6aefa
+- Eyring, V. et al. (2016) Geosci. Model Dev. 9, 1937-1958. https://doi.org/10.5194/gmd-9-1937-2016
 - Fick, S. E. and Hijmans, R. J. (2017) Int. J. Climatol. 37, 4302-4315. https://doi.org/10.1002/joc.5086
+- Hersbach, H. et al. (2020) Q. J. R. Meteorol. Soc. 146, 1999-2049. https://doi.org/10.1002/qj.3803
 - Hurtt, G. C. et al. (2020) Geosci. Model Dev. 13, 5425-5464. https://doi.org/10.5194/gmd-13-5425-2020
 - Lamarque, J.-F. et al. (2013) Atmos. Chem. Phys. 13, 7997-8018. https://doi.org/10.5194/acp-13-7997-2013
 - Meinshausen, M. et al. (2020) Geosci. Model Dev. 13, 3571-3605. https://doi.org/10.5194/gmd-13-3571-2020

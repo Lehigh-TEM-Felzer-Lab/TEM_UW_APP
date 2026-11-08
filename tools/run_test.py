@@ -10,9 +10,9 @@ summary.txt and archive_<time>.tar.gz. Steps whose output exists are skipped, so
 TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store). TEM_MODULES="gcc openmpi" loads modules around
 every command.
 
-Climate is ERA5 daily statistics of one year (the CDS dataset derived-era5-single-levels-daily-statistics). The monthly
+Climate is ERA5 daily statistics of one year, downloaded by src/gen_climate_inputs.py (CDS dataset derived-era5-single-levels-daily-statistics). The monthly
 case aggregates it to months, the daily case runs the 365 days of that year (the model cannot stop within a year).
-Every other input is made by src/make_global_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
+Every other input is made by src/gen_static_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
 wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) and N deposition (ISIMIP3b). Ozone comes from
 CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (docs/global_data.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
 (AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
@@ -27,8 +27,6 @@ import subprocess
 import sys
 import tarfile
 import time
-import zipfile
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,27 +46,9 @@ LUH2_YEAR = 2015  # last year of LUH2 v2h states
 BOX = {"lon_min": -180.0, "lon_max": 179.0, "lat_min": -89.0, "lat_max": 89.0}
 OZONE = 0.0  # placeholder AOT40 [ppb h]
 NDEP = 1000.0  # placeholder N deposition [mg N m-2 yr-1]
-ERA5 = {  # statistic -> {ERA5 variable: (name in the file, name in the merged file)}
-    "daily_mean": {
-        "2m_temperature": ("t2m", "t2m"),
-        "2m_dewpoint_temperature": ("d2m", "d2m"),
-    },
-    "daily_maximum": {"2m_temperature": ("t2m", "tmax")},
-    "daily_minimum": {"2m_temperature": ("t2m", "tmin")},
-    "daily_sum": {
-        "total_precipitation": ("tp", "tp"),
-        "surface_solar_radiation_downwards": ("ssrd", "ssrd"),
-    },
-}
-UNITS = {"t2m": "K", "d2m": "K", "tmax": "K", "tmin": "K", "tp": "m", "ssrd": "J m-2"}
 VARMAP = {
-    "tair": "t2m",
-    "tmin": "tmin",
-    "tmax": "tmax",
-    "prec": "tp",
-    "nirr": "ssrd",
-    "dewpoint": "d2m",
-}
+    k: k for k in ("tair", "tmin", "tmax", "prec", "nirr", "dewpoint")
+}  # names written by gen_climate_inputs.py
 OUTVARS = ["gpp", "npp", "nep", "vegc", "soilorgc"]
 DAILY_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years": 300}
 FAST_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years": 300}
@@ -181,81 +161,33 @@ def build(work: Path, jobs: int, flags: set[str], only: list[str] | None) -> Non
     say("built TEM_2026")
 
 
-def era5_request(stat: str, month: int, target: Path) -> None:
-    import cdsapi
-
-    request = {
-        "product_type": "reanalysis",
-        "variable": list(ERA5[stat]),
-        "year": str(YEAR),
-        "month": f"{month:02d}",
-        "day": [f"{d:02d}" for d in range(1, 32)],
-        "daily_statistic": stat,
-        "time_zone": "utc+00:00",
-        "frequency": "1_hourly",
-    }
-    client = cdsapi.Client(quiet=True)
-    for grid in (
-        "1.0/1.0",
-        None,
-    ):  # the coarse grid saves download; fall back to the native grid
-        try:
-            client.retrieve(
-                "derived-era5-single-levels-daily-statistics",
-                {**request, **({"grid": grid} if grid else {})},
-                str(target),
-            )
-            break
-        except Exception as error:
-            if grid is None:
-                raise
-            say(
-                f"ERA5 {stat} {month}: request with grid failed ({str(error)[:100]}); retrying without grid"
-            )
-    if zipfile.is_zipfile(target):
-        with zipfile.ZipFile(target) as z:
-            names = [n for n in z.namelist() if n.endswith(".nc")]
-            z.extractall(target.parent / "unzipped")
-        ds = xr.merge(
-            [xr.open_dataset(target.parent / "unzipped" / n) for n in names]
-        ).load()
-        target.unlink()
-        ds.to_netcdf(target)
-
-
 def era5(work: Path) -> Path:
-    """downloads/era5_daily_<year>.nc: t2m, d2m, tmax, tmin, tp, ssrd on the daily time axis of the year."""
-    out = work / "downloads" / f"era5_daily_{YEAR}.nc"
-    if out.exists():
-        return out
-    if not (Path.home() / ".cdsapirc").exists() and "CDSAPI_KEY" not in os.environ:
-        sys.exit("no ~/.cdsapirc: see https://cds.climate.copernicus.eu/how-to-api")
-    tmp = work / "downloads" / "era5"
-    tmp.mkdir(parents=True, exist_ok=True)
-    jobs = [(s, m, tmp / f"{s}_{m:02d}.nc") for s in ERA5 for m in range(1, 13)]
-    todo = [j for j in jobs if not j[2].exists()]
-    say(f"ERA5: {len(todo)} requests")
-    with ThreadPoolExecutor(4) as pool:
-        for _ in pool.map(lambda j: era5_request(*j), todo):
-            pass
-    parts = []
-    for stat, names in ERA5.items():
-        months = []
-        for m in range(1, 13):
-            ds = xr.open_dataset(tmp / f"{stat}_{m:02d}.nc")
-            ds = ds.rename({k: "time" for k in ("valid_time",) if k in ds.dims})
-            months.append(
-                ds.drop_vars([v for v in ("expver", "number") if v in ds.coords])
-            )
-        ds = xr.concat(months, "time")
-        for src, dst in names.values():
-            parts.append(
-                ds[src]
-                .rename(dst)
-                .assign_attrs(units=ds[src].attrs.get("units", UNITS[dst]))
-            )
-    xr.merge(parts).load().to_netcdf(out)
-    say(f"wrote {out}")
+    """downloads/era5/climate_era5.nc from src/gen_climate_inputs.py: tair, tmin, tmax, prec, nirr, dewpoint, daily, of the year."""
+    out = work / "downloads" / "era5" / "climate_era5.nc"
+    if not out.exists():
+        if not (Path.home() / ".cdsapirc").exists() and "CDSAPI_KEY" not in os.environ:
+            sys.exit("no ~/.cdsapirc: see https://cds.climate.copernicus.eu/how-to-api")
+        (work / "logs").mkdir(exist_ok=True)
+        say("ERA5 download")
+        if sh(
+            [
+                sys.executable,
+                str(work / "repos" / "TEM_UW_APP" / "src" / "gen_climate_inputs.py"),
+                "--out",
+                str(out.parent),
+                "--start",
+                str(YEAR),
+                "--end",
+                str(YEAR),
+                "--bbox",
+                *map(str, BOX.values()),
+                "era5",
+                "--grid",
+                "1.0/1.0",
+            ],
+            log=work / "logs" / "era5.log",
+        ):
+            sys.exit("ERA5 download failed (logs/era5.log)")
     return out
 
 
@@ -277,14 +209,18 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
     data, app = work / "data", work / "repos" / "TEM_UW_APP"
     data.mkdir(exist_ok=True)
     (work / "logs").mkdir(exist_ok=True)
-    grid = ["--out", str(data), "--cache", str(work / "downloads"), "--res", "1.0"] + [
-        x for k, v in BOX.items() for x in (f"--{k.replace('_', '-')}", str(v))
-    ]
+    grid = ["--out", str(data), "--cache", str(work / "downloads"), "--res", "1.0"]
+    grid += ["--bbox", *map(str, BOX.values())]
 
     def make(*sub: str) -> int:
         say(f"data: {sub[0]}")
         return sh(
-            [sys.executable, str(app / "src" / "make_global_inputs.py"), *grid, *sub],
+            [
+                sys.executable,
+                str(app / "src" / "gen_static_inputs.py"),
+                *grid,
+                *sub,
+            ],
             log=work / "logs" / f"data_{sub[0]}.log",
         )
 

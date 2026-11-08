@@ -1,13 +1,12 @@
 """Download global datasets and write the TEM_2026 input files for a region.
 
-Each subcommand writes one file of INPUT/ on the grid given by --lon-min/--lon-max/--lat-min/--lat-max/--res
-(cell centres on multiples of res from the minimum). See docs/global_data.md of TEM_UW_APP for the sources, units and caveats.
+Each subcommand writes one file of INPUT/ on the grid given by --bbox LON_MIN LON_MAX LAT_MIN LAT_MAX (default: the globe) and --res
+(cell centres on multiples of res from the minimum). The subcommand all writes every static input including lulc.nc.
+See docs/global_data.md of TEM_UW_APP for the sources, units and caveats.
 
-    python src/make_global_inputs.py --out INPUT --lon-min -125 --lon-max -110 --lat-min 32 --lat-max 49 co2 --start 2015 --end 2100
-    python src/make_global_inputs.py ... lightning population
-    python src/make_global_inputs.py ... soil elev wind
-    python src/make_global_inputs.py ... lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
-    python src/make_global_inputs.py ... static
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 --res 0.5 all --cohorts natural crops
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 co2 --start 2015 --end 2100
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 lulc --year 2015 --cohorts natural --min-area 10
 """
 
 import argparse
@@ -67,10 +66,11 @@ POTVEG_TO_TEM = {
 NATURAL = ("primf", "primn", "secdf", "secdn", "range")
 CROPS = ("c3ann", "c4ann", "c3per", "c4per", "c3nfx")
 COHORTS = {
-    1: (NATURAL, None),
-    2: (CROPS, 50),
-    3: (("pastr",), 51),
+    "natural": (NATURAL, None),
+    "crops": (CROPS, 50),
+    "pasture": (("pastr",), 51),
 }  # cohort: (LUH2 states, TEM currentveg)
+LUH2 = "https://luh.umd.edu/LUH2/LUH2_v2h"
 # TEM vegetation types and names, from params/biogeography/tcomm50_lulc.yaml (attributes of lulc.nc)
 VEG_TYPES = list(range(1, 57))
 VEG_NAMES = (
@@ -189,9 +189,9 @@ def hrmc_file(cache: Path) -> Path:
             Path(str(path) + ".part").rename(path)
             return path
     raise SystemExit(
-        "lightning: LIS/OTD HRMC download failed. NASA now asks for a free Earthdata Login: "
-        "create an account at https://urs.earthdata.nasa.gov, then set EARTHDATA_TOKEN "
-        "(profile > Generate Token) or put the login in ~/.netrc "
+        "lightning: LIS/OTD HRMC download failed. NASA asks for a free Earthdata Login (EDL): "
+        "get an EDL token at https://urs.earthdata.nasa.gov (profile > Generate Token) and set "
+        "EARTHDATA_TOKEN, or put the login in ~/.netrc "
         "(machine urs.earthdata.nasa.gov login <user> password <password>)"
     )
 
@@ -321,8 +321,7 @@ def population(a: argparse.Namespace) -> None:
         lon=slice(lon[0] - a.res, lon[-1] + a.res),
         lat=slice(lat[0] - a.res, lat[-1] + a.res),
     )
-    da = da.load()
-    people = box_mean(da.fillna(0.0), lon, lat, a.res, how="sum").fillna(0.0)
+    people = box_mean(da.fillna(0.0), lon, lat, a.res, how="sum").fillna(0.0).compute()
     south = np.deg2rad(np.clip(lat - a.res / 2, -90, 90))
     north = np.deg2rad(np.clip(lat + a.res / 2, -90, 90))
     area = EARTH_RADIUS_KM**2 * np.deg2rad(a.res) * (np.sin(north) - np.sin(south))
@@ -515,20 +514,26 @@ def lulc(a: argparse.Namespace) -> None:
     pot = xr.apply_ufunc(
         lambda x: np.vectorize(lambda k: POTVEG_TO_TEM.get(int(k), 0))(x), pv
     )
-    st = xr.open_dataset(a.luh2, decode_times=False)
+    st = xr.open_dataset(
+        a.luh2 or fetch(f"{LUH2}/states.nc", Path(a.cache)), decode_times=False
+    )
     units = st["time"].attrs["units"]
     base = int(units.split("since")[1].strip().split("-")[0])
-    st = st.isel(time=a.year - base).rename(lon="lon", lat="lat")
-    stat = xr.open_dataset(a.luh2_static)
-    area = (stat["carea"] * (1 - stat["icwtr"])).rename(lon="lon", lat="lat")
-    n = len(COHORTS)
+    # LUH2 latitudes run from north to south
+    st = st.isel(time=a.year - base).sortby("lat")
+    stat = xr.open_dataset(
+        a.luh2_static or fetch(f"{LUH2}/staticData_quarterdeg.nc", Path(a.cache))
+    ).sortby("lat")
+    area = stat["carea"] * (1 - stat["icwtr"])
+    sel = {k: v for k, v in COHORTS.items() if k in a.cohorts}
+    n = len(sel)
     shape = (n, lat.size, lon.size)
     out = {
         k: np.full(shape, INT_FILL, "int64")
         for k in ("potveg", "currentveg", "subtype", "agstate", "agprevstate", "mxc")
     }
     chrt = np.full(shape, np.nan, "float32")
-    for c, (names, veg) in COHORTS.items():
+    for c, (names, veg) in enumerate(sel.values()):
         km2 = sum(st[s].fillna(0) for s in names) * area
         km2 = km2.sel(
             lon=slice(lon[0] - a.res, lon[-1] + a.res),
@@ -549,14 +554,14 @@ def lulc(a: argparse.Namespace) -> None:
         grid[np.ix_(np.unique(j[ok_j]), np.unique(i[ok_i]))] = s.transpose(
             "j", "i"
         ).values
-        has = (grid > 1e-3) & (pot.values > 0)
+        has = (grid > a.min_area) & (pot.values > 0)
         v = pot.values if veg is None else np.full_like(pot.values, veg)
-        chrt[c - 1] = np.where(has, grid, np.nan)
-        out["potveg"][c - 1] = np.where(has, pot.values, INT_FILL)
-        out["currentveg"][c - 1] = np.where(has, v, INT_FILL)
-        out["subtype"][c - 1] = np.where(has, v, INT_FILL)
-        out["agstate"][c - 1] = np.where(has, int(veg is not None), INT_FILL)
-        out["agprevstate"][c - 1] = np.where(has, int(veg is not None), INT_FILL)
+        chrt[c] = np.where(has, grid, np.nan)
+        out["potveg"][c] = np.where(has, pot.values, INT_FILL)
+        out["currentveg"][c] = np.where(has, v, INT_FILL)
+        out["subtype"][c] = np.where(has, v, INT_FILL)
+        out["agstate"][c] = np.where(has, int(veg is not None), INT_FILL)
+        out["agprevstate"][c] = np.where(has, int(veg is not None), INT_FILL)
     has = ~np.isnan(chrt)
     dims = ("cohort", "lat", "lon")
     ds = xr.Dataset(
@@ -565,7 +570,9 @@ def lulc(a: argparse.Namespace) -> None:
                 dims,
                 np.where(
                     has,
-                    np.where(np.arange(1, n + 1)[:, None, None] == 1, 3000.0, 1.0),
+                    np.where(
+                        (np.array(list(sel)) == "natural")[:, None, None], 3000.0, 1.0
+                    ),
                     np.nan,
                 ).astype("float32"),
             ),
@@ -582,8 +589,7 @@ def lulc(a: argparse.Namespace) -> None:
         ds[k].encoding["_FillValue"] = np.int64(INT_FILL)
     ds["cohort"].attrs = {
         "long_name": "cohort index within the cell",
-        "flag_values": np.array(sorted(COHORTS), dtype="int32"),
-        "flag_meanings": "natural_vegetation crops pasture",
+        "flag_meanings": " ".join(sel),
     }
     for k in ("potveg", "currentveg"):
         ds[k].attrs = {
@@ -610,6 +616,16 @@ def static(a: argparse.Namespace) -> None:
     print("wrote", Path(a.out) / "static.nc")
 
 
+def everything(a: argparse.Namespace) -> None:
+    """Every static input: elev, soil, wind, ozone, ndep, static, lulc, flash and popdens (ozone and lightning are skipped without their login)."""
+    a.file, a.var, a.scale, a.start, a.end = None, None, 1.0, 2005, 2014
+    for f in (elev, soil, wind, ozone, ndep, static, lulc, lightning, population):
+        try:
+            f(a)
+        except SystemExit as e:
+            print("skipped:", e)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -617,8 +633,13 @@ def main() -> None:
     p.add_argument("--out", default="INPUT")
     p.add_argument("--cache", default="downloads")
     p.add_argument("--res", type=float, default=0.5)
-    for k in ("lon_min", "lon_max", "lat_min", "lat_max"):
-        p.add_argument("--" + k.replace("_", "-"), type=float, required=True)
+    p.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        default=[-180, 179, -89, 89],
+        metavar=("LON_MIN", "LON_MAX", "LAT_MIN", "LAT_MAX"),
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("co2")
     c.add_argument("--start", type=int, required=True)
@@ -655,12 +676,27 @@ def main() -> None:
         )
         c.add_argument("--end", type=int, default=2014, help="ndep: last year averaged")
         c.set_defaults(f=f)
-    c = sub.add_parser("lulc")
-    c.add_argument("--luh2", required=True, help="LUH2 states.nc")
-    c.add_argument("--luh2-static", required=True, help="LUH2 staticData_quarterdeg.nc")
-    c.add_argument("--year", type=int, required=True)
-    c.set_defaults(f=lulc)
+    for name, f in (("lulc", lulc), ("all", everything)):
+        c = sub.add_parser(name)
+        c.add_argument("--luh2", help="LUH2 states.nc; downloaded if not given")
+        c.add_argument("--luh2-static", help="LUH2 staticData_quarterdeg.nc")
+        c.add_argument("--year", type=int, default=2015, help="year of the LUH2 states")
+        c.add_argument(
+            "--cohorts",
+            nargs="+",
+            choices=list(COHORTS),
+            default=list(COHORTS),
+            help="cohorts to keep",
+        )
+        c.add_argument(
+            "--min-area",
+            type=float,
+            default=1e-3,
+            help="smallest cohort area kept in a cell [km2]",
+        )
+        c.set_defaults(f=f)
     a = p.parse_args()
+    a.lon_min, a.lon_max, a.lat_min, a.lat_max = a.bbox
     a.f(a)
 
 

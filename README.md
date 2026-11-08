@@ -11,7 +11,8 @@ the files of the older TEM versions. The earlier CSV/XML workflow is not support
 | `case_submit.sh` | entry point, run from the case directory |
 | `config/run_config.yaml` | all keys with defaults and comments |
 | `src/driver.py`, `tem_climate.py`, `tem_config.py` | case builder: regridding, units, `tem_config.yaml` |
-| `src/make_global_inputs.py` | downloads the global datasets and builds `co2.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` for any region |
+| `src/gen_climate_inputs.py` | downloads ERA5, gridMET, MACA or CMIP6 forcing for a box and years and writes the climate file |
+| `src/gen_static_inputs.py` | downloads the global datasets and builds `co2.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` for a box |
 | `src/xml2yaml.py`, `src/ascii2nc.py` | convert old XML, parameter and ASCII files |
 | `launchers/` | local and SLURM launchers |
 | `examples/west/` | western United States example |
@@ -63,19 +64,17 @@ Daily and hourly data are averaged to months.
 
 # Input data
 
-`climate.nc` is made by the app from your climate files. The other inputs come from `src/make_global_inputs.py`:
+The app builds `climate.nc` from your climate files, which `src/gen_climate_inputs.py` can download; `src/gen_static_inputs.py` makes the other inputs:
 
 ```bash
-A="--out INPUT --cache downloads --lon-min -125 --lon-max -110 --lat-min 32 --lat-max 49 --res 0.5"
-python src/make_global_inputs.py $A co2 --start 2015 --end 2024
-python src/make_global_inputs.py $A soil
-python src/make_global_inputs.py $A elev
-python src/make_global_inputs.py $A wind
-python src/make_global_inputs.py $A static
-python src/make_global_inputs.py $A lulc --luh2 states.nc --luh2-static staticData_quarterdeg.nc --year 2015
+A="--out INPUT --cache downloads --bbox -125 -110 32 49 --res 0.5"
+python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000 --end 2019 gridmet
+python src/gen_static_inputs.py $A co2 --start 2000 --end 2019
+python src/gen_static_inputs.py $A all --year 2015 --cohorts natural crops pasture
 ```
 
-Ozone needs a CEDA token (`CEDA_TOKEN`) and lightning a NASA Earthdata login (`EARTHDATA_TOKEN`); all other files are downloaded by their subcommand (`lightning`, `population`, `ndep`, ...). Sources, download links,
+`gen_climate_inputs.py` writes `climate_<source>.nc` and `varmap_<source>.yaml` (copy it into `run_config.yaml`; set `netcdf_climate_in_frequency: daily`). `all` builds `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` (and the files they are made from); `--cohorts` and `--min-area` select the cohorts of `lulc.nc`.
+Ozone needs a CEDA token (`CEDA_TOKEN`) and lightning an Earthdata Login token (`EARTHDATA_TOKEN`); all other files are downloaded by the script. Sources, download links,
 units and the land-cover assumptions are in [docs/global_data.md](docs/global_data.md). Files of older TEM versions are converted as in
 [docs/converting.md](docs/converting.md). Then set the `netcdf_*_in_file` keys of `run_config.yaml` to the files.
 
@@ -87,7 +86,7 @@ units and the land-cover assumptions are in [docs/global_data.md](docs/global_da
 
 | File | Content |
 |---|---|
-| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | every key of `run_config.yaml` with default and meaning |
+| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | every key of `run_config.yaml` with default and description |
 | [TEM_UW_APP-Technical-Description.pdf](TEM_UW_APP-Technical-Description.pdf) | this README and the documents in `docs/` |
 
 `python tools/make_docs.py` rebuilds both (needs pandoc and xelatex).
