@@ -3,7 +3,7 @@
     python tools/make_docs.py        # needs pandoc and xelatex
 
 The key reference is generated from config/run_config.yaml: one table per section, with the default and the comment of each key.
-The technical description is README.md, docs/global_data.md and docs/converting.md in one document.
+The technical description is README.md and docs/global_data.md in one document.
 """
 
 import re
@@ -153,11 +153,19 @@ def pandoc(md: str, out: Path, title: str, subtitle: str) -> None:
         subprocess.run(cmd, check=True, cwd=ROOT / "docs")
 
 
+def patch_notes() -> str:
+    heading = "# I/O and storm patch"
+    readme = (ROOT / "README.md").read_text()
+    body = readme.split(heading + "\n", 1)[1].split("\n# ", 1)[0]
+    return f"{heading}\n{body.strip()}\n"
+
+
 def key_reference() -> str:
     out = [
         "# Overview\n",
         "`config/run_config.yaml` is the run configuration of TEM_UW_APP. A case-local `run_config.yaml` sets only the keys it changes; unknown keys are an error. The sections below are the file itself. Keys of the section Model options are written to `tem_config.yaml` of TEM_2026, whose template describes them in more detail.\n",
     ]
+    out.append(patch_notes())
     block: list[str] = []
     started = False
     for line in (ROOT / "config" / "run_config.yaml").read_text().splitlines():
@@ -177,9 +185,7 @@ def key_reference() -> str:
 
 def technical() -> str:
     readme = (ROOT / "README.md").read_text().split("\n", 1)[1]
-    docs = "\n\n".join(
-        (ROOT / "docs" / f).read_text() for f in ("global_data.md", "converting.md")
-    )
+    docs = (ROOT / "docs" / "global_data.md").read_text()
     return f"# Overview\n{readme}\n\n{docs}"
 
 

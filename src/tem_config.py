@@ -36,6 +36,7 @@ MODEL_KEYS = {
     "ndep",
     "lightning",
     "popdens",
+    "storm",
     "nfertcrop",
     "nfertpasture",
     "mask",
@@ -74,6 +75,7 @@ APP_KEYS = {
     "netcdf_co2_in_file",
     "netcdf_fire_in_file",
     "netcdf_population_in_file",
+    "netcdf_storm_in_file",
     "surface_pressure_hpa",
     "varmap",
     "clmoutvars",
@@ -86,6 +88,7 @@ INPUT_KEYS = [
     "netcdf_co2_in_file",
     "netcdf_fire_in_file",
     "netcdf_population_in_file",
+    "netcdf_storm_in_file",
 ]
 REQUIRED = [
     "tem_src",
@@ -146,6 +149,17 @@ def load() -> dict:
                 expand(p, case_dir)
                 for p in (value if isinstance(value, list) else [value])
             ]
+    for key in ("clmoutvars", "temoutvars"):
+        names = cfg[key]
+        if not isinstance(names, list) or any(
+            not isinstance(name, str) or not name for name in names
+        ):
+            raise ValueError(f"{key} must be a YAML sequence of output variable names")
+    storm = cfg["storm_disturbance"]
+    if not isinstance(storm, int) or storm not in (0, 1):
+        raise ValueError("storm_disturbance must be true or false")
+    if storm and not cfg["netcdf_storm_in_file"]:
+        raise ValueError("storm_disturbance needs netcdf_storm_in_file")
     if cfg["veg_fire"] and not (
         cfg["netcdf_fire_in_file"] and cfg["netcdf_population_in_file"]
     ):

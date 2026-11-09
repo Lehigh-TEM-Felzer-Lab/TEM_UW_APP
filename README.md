@@ -1,8 +1,7 @@
 # TEM_UW_APP
 
 Prepares and runs a case of [TEM_2026](https://github.com/Lehigh-TEM-Felzer-Lab/TEM_2026). The app regrids gridded NetCDF data to the model grid,
-writes the NetCDF inputs and `tem_config.yaml` of the model, and runs or submits `xtem`. It also builds the global input files and converts
-the files of the older TEM versions. The earlier CSV/XML workflow is not supported; its last version is the commit before this one.
+writes the NetCDF inputs and `tem_config.yaml` of the model, and runs or submits `xtem`. It also builds NetCDF inputs from public climate and land datasets.
 
 # What files are what
 
@@ -13,10 +12,9 @@ the files of the older TEM versions. The earlier CSV/XML workflow is not support
 | `src/driver.py`, `tem_climate.py`, `tem_config.py` | case builder: regridding, units, `tem_config.yaml` |
 | `src/gen_climate_inputs.py` | downloads ERA5, gridMET, MACA or CMIP6 forcing for a box and years and writes the climate file |
 | `src/gen_static_inputs.py` | downloads the global datasets and builds `co2.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` for a box |
-| `src/xml2yaml.py`, `src/ascii2nc.py` | convert old XML, parameter and ASCII files |
 | `launchers/` | local and SLURM launchers |
 | `examples/west/` | western United States example |
-| `docs/` | `global_data.md` (sources of the input data), `converting.md` |
+| `docs/` | `global_data.md` (sources of the input data) |
 | `tools/make_docs.py` | builds the two PDFs |
 
 # Setup
@@ -30,6 +28,8 @@ export TEM_UW_APP_ROOT=$PWD
 ```
 
 # Running a case
+
+See [the call hierarchy](flowchart.md) for the entry points and model execution.
 
 1. Copy `examples/west/run_config.yaml` to an empty directory.
 2. Set `tem_src` (the TEM_2026 checkout), the climate files, the box and the years. For `n_cpus > 1` set `tem_exe: "{tem_src}/build_mpi/xtem"`.
@@ -56,7 +56,8 @@ logs/
 | `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
 | `spinflag`, `veg_fire`, `xnfertflag`, ... | the options of `tem_config.yaml`, one key each |
 | `cmntecd`, `vegecd`, ... | parameter files, by default `{tem_src}/params/biogeography/` |
-| `clmoutvars`, `temoutvars` | variables written to `OUTPUT/tem.nc` |
+| `output_file` | native NetCDF output path, default `./OUTPUT/tem.nc` |
+| `clmoutvars`, `temoutvars` | YAML sequences of output variable names |
 | `run_mode`, `n_nodes`, `n_cpus`, `walltime`, `partition`, `mem`, `sbatch_options` | sbatch settings as in pyUFS; the cells are shared between the `n_cpus` MPI tasks |
 
 Climate units are read from the `units` attribute and converted. `tmin` and `tmax` can replace `tair` and `dtr`, and `dewpoint` or `huss` can replace `vpr`.
@@ -71,6 +72,37 @@ hvc_dat: "{tem_src}/params/biogeography/hvc50_openn_dndc.yaml"
 hvd_dat: "{tem_src}/params/biogeography/hvd50_openn_dndc.yaml"
 ```
 
+# I/O and storm patch
+
+Apply `TEM_UW_APP-io.patch` with `git am` from this repository.
+
+The case launcher stages NetCDF and writes the model YAML directly, including
+the output-variable sequences. Legacy ASCII and XML conversion tools are
+removed. Source adapters still ingest public data for the NetCDF builders.
+
+Stochastic tropical storm and hurricane damage requires a TEM_2026 build
+with `STORM=1`, the default. Use `make STORM=0` to build the core without
+the feature. Set the following keys in `run_config.yaml` to enable it.
+
+```yaml
+storm_disturbance: true
+netcdf_storm_in_file: /data/storm.nc
+```
+
+| NetCDF variable | Dimensions | Units |
+| --- | --- | --- |
+| `lat` | `lat` | `degrees_north` |
+| `lon` | `lon` | `degrees_east` |
+| `storm_return_interval` | `lat, lon` | `years` |
+| `hurricane_return_interval` | `lat, lon` | `years` |
+
+Use one static NetCDF dataset with both return-interval fields on the same
+rectilinear grid. Zero disables the corresponding event. Positive intervals
+must be finite and at least one year. The model reads NetCDF content
+regardless of the filename extension. Generated files default to `.nc`.
+
+The app regrids and stages the dataset as `INPUT/storm.nc`.
+
 # Input data
 
 The app builds `climate.nc` from your climate files, which `src/gen_climate_inputs.py` can download; `src/gen_static_inputs.py` makes the other inputs:
@@ -84,8 +116,8 @@ python src/gen_static_inputs.py $A all --year 2015 --cohorts primary secondary c
 
 `gen_climate_inputs.py` writes `climate_<source>.nc` and `varmap_<source>.yaml` (copy it into `run_config.yaml`; set `netcdf_climate_in_frequency: daily`). `all` builds `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` (and the files they are made from); `--cohorts` and `--min-area` select the cohorts of `lulc.nc`.
 Ozone needs a CEDA token (`CEDA_TOKEN`) and lightning an Earthdata Login token (`EARTHDATA_TOKEN`); all other files are downloaded by the script. Sources, download links,
-units and the land-cover assumptions are in [docs/global_data.md](docs/global_data.md). Files of older TEM versions are converted as in
-[docs/converting.md](docs/converting.md). Then set the `netcdf_*_in_file` keys of `run_config.yaml` to the files.
+units and the land-cover assumptions are in [docs/global_data.md](docs/global_data.md). Set the `netcdf_*_in_file` keys of
+`run_config.yaml` to your datasets. NetCDF inputs may use any filename extension.
 
 # Test
 
@@ -94,11 +126,12 @@ units and the land-cover assumptions are in [docs/global_data.md](docs/global_da
 # Documentation
 
 | File | Content |
-|---|---|
-| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | every key of `run_config.yaml` with default and description |
-| [TEM_UW_APP-Technical-Description.pdf](TEM_UW_APP-Technical-Description.pdf) | this README and the documents in `docs/` |
+| --- | --- |
+| [TEM_UW_APP-Technical-Description.pdf](TEM_UW_APP-Technical-Description.pdf) | App workflow, I/O patch, and input sources |
+| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | App YAML configuration reference |
 
-`python tools/make_docs.py` rebuilds both (needs pandoc and xelatex).
+The [run configuration](config/run_config.yaml) lists keys, defaults, and meanings.
+`python tools/make_docs.py` builds PDF copies of the configuration reference and technical description (needs Pandoc and XeLaTeX).
 
 # Limits
 

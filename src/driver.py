@@ -85,18 +85,26 @@ def merged(
 
 def regrid_file(path: Path, cfg: dict, lon: np.ndarray, lat: np.ndarray) -> xr.Dataset:
     """Every lat/lon variable of a NetCDF file on the model grid."""
-    ds = xr.open_dataset(path)
-    ds = ds.rename(
-        {k: v for k, v in clim.RENAME.items() if k in ds.dims or k in ds.coords}
-    )
-    ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon").sortby("lat")
-    out = {}
-    for name, da in ds.data_vars.items():
-        if {"lat", "lon"} <= set(da.dims):
-            method = "nearest" if name in NEAREST else cfg["regrid_method"]
-            out[name] = clim.to_grid(
-                da, lon, lat, method, cfg["horizontal_resolution"]
-            ).load()
+    with xr.open_dataset(path, engine="netcdf4") as source:
+        ds = source.rename(
+            {
+                k: v
+                for k, v in clim.RENAME.items()
+                if k in source.dims or k in source.coords
+            }
+        )
+        ds = (
+            ds.assign_coords(lon=((ds.lon + 180) % 360) - 180)
+            .sortby("lon")
+            .sortby("lat")
+        )
+        out = {}
+        for name, da in ds.data_vars.items():
+            if {"lat", "lon"} <= set(da.dims):
+                method = "nearest" if name in NEAREST else cfg["regrid_method"]
+                out[name] = clim.to_grid(
+                    da, lon, lat, method, cfg["horizontal_resolution"]
+                ).load()
     return xr.Dataset(out)
 
 
@@ -181,17 +189,16 @@ def write_config(cfg: dict, present: set[str]) -> None:
         "lulclastyr": y1,
         "mxnumgrid": lon.size * lat.size,
         "clmoutflag": int(bool(cfg["clmoutvars"])),
-        "nclmout": len(cfg["clmoutvars"]),
-        "clmoutvars": ",".join(cfg["clmoutvars"]) or "missing",
+        "clmoutvars": cfg["clmoutvars"],
         "temoutflag": int(bool(cfg["temoutvars"])),
-        "ntemout": len(cfg["temoutvars"]),
-        "temoutvars": ",".join(cfg["temoutvars"]) or "missing",
+        "temoutvars": cfg["temoutvars"],
         "netcdf_climate_in_file": "./INPUT/climate.nc",
         "netcdf_static_in_file": "./INPUT/static.nc",
         "netcdf_lulc_in_file": "./INPUT/lulc.nc",
         "netcdf_co2_in_file": "./INPUT/co2.nc",
         "netcdf_fire_in_file": "./INPUT/lightning.nc",
         "netcdf_population_in_file": "./INPUT/population.nc",
+        "netcdf_storm_in_file": "./INPUT/storm.nc",
     }
     unknown = {
         key
@@ -215,6 +222,7 @@ def build(cfg: dict) -> None:
     case = cfg["case_dir"]
     for sub in ("INPUT", "OUTPUT"):
         (case / sub).mkdir(parents=True, exist_ok=True)
+    (case / cfg["output_file"]).parent.mkdir(parents=True, exist_ok=True)
     lon, lat = grid(cfg)
     clim_ds, extra = climate(cfg, lon, lat)
     present = save(clim_ds, case / "INPUT" / "climate.nc")
@@ -235,9 +243,16 @@ def build(cfg: dict) -> None:
     ):
         if cfg[key]:
             present |= save(merged(cfg[key], cfg, lon, lat), case / "INPUT" / name)
+    if cfg["storm_disturbance"]:
+        present |= save(
+            merged(cfg["netcdf_storm_in_file"], cfg, lon, lat),
+            case / "INPUT" / "storm.nc",
+        )
     if cfg["netcdf_co2_in_file"]:
-        co2 = xr.open_mfdataset(files(cfg["netcdf_co2_in_file"]), combine="by_coords")
-        present |= save(co2.load(), case / "INPUT" / "co2.nc")
+        with xr.open_mfdataset(
+            files(cfg["netcdf_co2_in_file"]), combine="by_coords", engine="netcdf4"
+        ) as co2:
+            present |= save(co2.load(), case / "INPUT" / "co2.nc")
     write_config(cfg, present)
     log.info(
         "Built %s: %d x %d cells of %g degrees",

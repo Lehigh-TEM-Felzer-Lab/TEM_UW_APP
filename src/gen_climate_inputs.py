@@ -14,6 +14,7 @@ import argparse
 import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from pathlib import Path
 
 import pandas as pd
@@ -95,7 +96,7 @@ def era5_month(stat: str, year: int, month: int, a: argparse.Namespace) -> xr.Da
             min(lon_max + 1, 180),
         ],
     }
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, ExitStack() as inputs:
         target = Path(tmp) / "r.nc"
         for grid in (a.grid, None) if a.grid else (None,):
             try:
@@ -109,14 +110,28 @@ def era5_month(stat: str, year: int, month: int, a: argparse.Namespace) -> xr.Da
                 if grid is None:
                     raise
                 print(f"ERA5 request with grid {grid} failed ({str(error)[:100]})")
-        files = [target]
         if zipfile.is_zipfile(target):
-            with zipfile.ZipFile(target) as z:
-                z.extractall(tmp)
-            files = sorted(Path(tmp).glob("*.nc"))
-        ds = xr.merge([xr.open_dataset(f) for f in files])
+            datasets = []
+            with zipfile.ZipFile(target) as archive:
+                for member in archive.infolist():
+                    if member.is_dir():
+                        continue
+                    try:
+                        ds = xr.open_dataset(
+                            archive.extract(member, tmp), engine="netcdf4"
+                        )
+                    except OSError as error:
+                        if error.errno != -51:  # libnetcdf NC_ENOTNC
+                            raise
+                    else:
+                        datasets.append(inputs.enter_context(ds))
+            if not datasets:
+                raise ValueError("ERA5 archive contains no readable NetCDF datasets")
+        else:
+            datasets = [inputs.enter_context(xr.open_dataset(target, engine="netcdf4"))]
         return (
-            ds.rename(valid_time="time")
+            xr.merge(datasets)
+            .rename(valid_time="time")
             .drop_vars(["expver", "number"], errors="ignore")
             .load()
         )

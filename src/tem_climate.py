@@ -40,7 +40,7 @@ def open_dataset(
             f"No file matches netcdf_climate_in_file: {[str(p) for p in (path if isinstance(path, list) else [path])]}"
         )
     log.info("Reading %d input file(s)", len(paths))
-    ds = xr.open_mfdataset(paths, combine="by_coords", chunks={})
+    ds = xr.open_mfdataset(paths, combine="by_coords", chunks={}, engine="netcdf4")
     ds = ds.rename({k: v for k, v in RENAME.items() if k in ds.dims or k in ds.coords})
     ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon").sortby("lat")
     if "time" in ds.coords and not isinstance(ds.indexes["time"], pd.DatetimeIndex):

@@ -5,7 +5,7 @@
     python run_test.py --only monthly,fire
 
 Everything happens in WORK (default /users/jkodero/research/scratch/tem_test): repos/, downloads/, data/, cases/<name>/,
-summary.txt and archive_<time>.tar.gz. Steps whose output exists are skipped, so a second run only repeats what failed;
+summary.yaml and archive_<time>.tar.gz. Steps whose output exists are skipped, so a second run only repeats what failed;
 --force removes the case directories first. Needs git, make, mpicxx, libyaml, libnetcdf, wget and the python packages of
 TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store). TEM_MODULES="gcc openmpi" loads modules around
 every command.
@@ -354,7 +354,7 @@ def run_case(
 def archive(work: Path, keep_inputs: bool) -> Path:
     path = work / f"archive_{datetime.now(tz=UTC):%Y%m%d_%H%M%S}.tar.gz"
     with tarfile.open(path, "w:gz") as t:
-        for f in ("summary.txt", "build_monthly.log", "build_daily.log"):
+        for f in ("summary.yaml", "build_monthly.log", "build_daily.log"):
             if (work / f).exists():
                 t.add(work / f, arcname=f)
         for sub in ("logs",):
@@ -440,17 +440,7 @@ def main() -> int:
             say(f"case {n}")
             rows.append(run_case(n, work, climate, data, a, a.ncpu))
             say(str(rows[-1]))
-            lines = [
-                f"{r['case']:16s} rc={r['rc']} {r['minutes']:7.1f} min "
-                + " ".join(
-                    f"{k}={v:.4g}"
-                    for k, v in r.items()
-                    if k in ("cells", "valid_cell_cohorts", "gpp_max")
-                )
-                + f" {r['note']}"
-                for r in rows
-            ]
-            (work / "summary.txt").write_text("\n".join(lines) + "\n")
+            (work / "summary.yaml").write_text(yaml.safe_dump(rows, sort_keys=False))
     finally:
         archive(work, a.keep_inputs)
     return int(any(r["rc"] for r in rows))
