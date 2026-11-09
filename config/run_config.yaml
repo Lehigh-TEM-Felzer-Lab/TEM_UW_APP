@@ -170,7 +170,23 @@ vegecd: "{tem_src}/params/biogeography/tveg50_lulc.yaml" # Vegetation
 conductecd: "{tem_src}/params/biogeography/tconduct50_lulc.yaml" # Hydraulic conductance
 mcrbecd: "{tem_src}/params/biogeography/tmcrv50_lulc.yaml" # Microbial
 agecd: "{tem_src}/params/biogeography/ag50_lulc.yaml" # Agriculture
-datfilenames: "{tem_src}/params/biogeography/hvc50_openn_dndc.yaml,{tem_src}/params/biogeography/hvd50_openn_dndc.yaml" # Site files, comma separated
+# Site calibrations use top-level *_dat keys. Each file declares its TEM community ID.
+ice_dat: "{tem_src}/params/biogeography/ice50_openn_303.yaml"
+tpd_dat: "{tem_src}/params/biogeography/tpd50_openn_303.yaml"
+bnz_dat: "{tem_src}/params/biogeography/bnz50_openn_303.yaml"
+hvc_dat: "{tem_src}/params/biogeography/hvc50_openn_dndc.yaml"
+hvd_dat: "{tem_src}/params/biogeography/hvd50_openn_dndc.yaml"
+knz_ag0_dat: "{tem_src}/params/biogeography/knz50_openn_303_ag0.yaml"
+pwn_dat: "{tem_src}/params/biogeography/pwn50_openn_303.yaml"
+cur_dat: "{tem_src}/params/biogeography/cur50_openn_303.yaml"
+duc_dat: "{tem_src}/params/biogeography/duc50_openn_303.yaml"
+gux_dat: "{tem_src}/params/biogeography/gux50_openn_303.yaml"
+tai_dat: "{tem_src}/params/biogeography/tai50_openn_303.yaml"
+gum_dat: "{tem_src}/params/biogeography/gum50_openn_303.yaml"
+kbm_dat: "{tem_src}/params/biogeography/kbm50_openn_303.yaml"
+turf_dat: "{tem_src}/params/biogeography/turf50_openn_303.yaml"
+knz_ag2_dat: "{tem_src}/params/biogeography/knz50_openn_303_ag2.yaml"
+rodale_ag2_dat: "{tem_src}/params/biogeography/rodale_openn_303_ag2.yaml"
 
 # -----------------------------------------------------------------------------
 # 7. OUTPUT AND MODEL STATE

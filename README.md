@@ -62,6 +62,15 @@ logs/
 Climate units are read from the `units` attribute and converted. `tmin` and `tmax` can replace `tair` and `dtr`, and `dewpoint` or `huss` can replace `vpr`.
 Daily and hourly data are averaged to months.
 
+Use top-level `*_dat` keys for site calibration files in `run_config.yaml`.
+The key is a label. TEM uses the community ID declared inside the file.
+Case-level calibration keys replace the default set.
+
+```yaml
+hvc_dat: "{tem_src}/params/biogeography/hvc50_openn_dndc.yaml"
+hvd_dat: "{tem_src}/params/biogeography/hvd50_openn_dndc.yaml"
+```
+
 # Input data
 
 The app builds `climate.nc` from your climate files, which `src/gen_climate_inputs.py` can download; `src/gen_static_inputs.py` makes the other inputs:

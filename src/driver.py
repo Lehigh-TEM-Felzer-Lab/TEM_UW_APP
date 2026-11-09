@@ -2,7 +2,6 @@
 """Build the TEM_2026 case of the current directory (INPUT/*.nc, tem_config.yaml) and run it."""
 
 import logging
-import re
 import subprocess
 import sys
 from glob import glob
@@ -10,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
+import yaml
 
 import tem_climate as clim
 import tem_config
@@ -163,7 +163,12 @@ DAILY = [d + 0.5 for d in range(365)]
 
 def write_config(cfg: dict, present: set[str]) -> None:
     """tem_config.yaml from the TEM_2026 template: the keys of run_config.yaml that it has, the years and the varmap."""
-    text = (cfg["tem_src"] / "templates" / "tem_config.yaml").read_text()
+    template = cfg["tem_src"] / "templates" / "tem_config.yaml"
+    model_cfg = {
+        key: value
+        for key, value in yaml.safe_load(template.read_text()).items()
+        if not tem_config.is_calibration_key(key)
+    }
     y0, y1 = cfg["start_year"], cfg["end_year"]
     lon, lat = grid(cfg)
     values = {k: v for k, v in cfg.items() if k not in tem_config.APP_KEYS}
@@ -188,28 +193,22 @@ def write_config(cfg: dict, present: set[str]) -> None:
         "netcdf_fire_in_file": "./INPUT/lightning.nc",
         "netcdf_population_in_file": "./INPUT/population.nc",
     }
-    for key, value in values.items():
-        text, n = re.subn(
-            rf"^{key}:.*$",
-            lambda _, k=key, v=value: f"{k}: {v}",
-            text,
-            flags=re.MULTILINE,
-        )
-        if n != 1:
-            raise KeyError(f"tem_config.yaml of {cfg['tem_src']} has no key '{key}'")
-    # model variables the app passes on: those whose variable is in a file it wrote
-    varmap = "".join(
-        f"\n  {k}: {v}"
-        for k, v in cfg["varmap"].items()
-        if k in tem_config.MODEL_KEYS and v.split("+")[0].split("[")[0] in present
+    unknown = {
+        key
+        for key in values
+        if key not in model_cfg and not tem_config.is_calibration_key(key)
+    }
+    if unknown:
+        raise KeyError(f"{template} is missing keys {sorted(unknown)}")
+    values["varmap"] = {
+        key: value
+        for key, value in cfg["varmap"].items()
+        if key in tem_config.MODEL_KEYS and value.split("+")[0].split("[")[0] in present
+    }
+    model_cfg.update(values)
+    (cfg["case_dir"] / "tem_config.yaml").write_text(
+        yaml.safe_dump(model_cfg, sort_keys=False)
     )
-    text = re.sub(
-        r"^varmap:.*$",
-        lambda _: f"varmap:{varmap}" if varmap else "varmap: {}",
-        text,
-        flags=re.MULTILINE,
-    )
-    (cfg["case_dir"] / "tem_config.yaml").write_text(text)
 
 
 def build(cfg: dict) -> None:

@@ -104,14 +104,20 @@ def expand(value: str, base: Path) -> Path:
     return path if path.is_absolute() else base / path
 
 
+def is_calibration_key(key: str) -> bool:
+    return isinstance(key, str) and len(key) > 4 and key.endswith("_dat")
+
+
 def load() -> dict:
     """Defaults overlaid with run_config.yaml of the current directory (the case directory)."""
     os.environ.setdefault("TEM_UW_APP_ROOT", str(ROOT))
     case_dir = Path.cwd()
     cfg = yaml.safe_load(DEFAULT_CONFIG.read_text())
     case = yaml.safe_load((case_dir / CASE_FILE).read_text()) or {}
+    if any(is_calibration_key(key) for key in case):
+        cfg = {key: value for key, value in cfg.items() if not is_calibration_key(key)}
     for key, value in case.items():
-        if key not in cfg:
+        if key not in cfg and not is_calibration_key(key):
             raise KeyError(f"Unknown run_config key: {key}")
         cfg[key] = {**(cfg[key] or {}), **(value or {})} if key == "varmap" else value
     for key in REQUIRED:
@@ -127,6 +133,11 @@ def load() -> dict:
     for key, value in cfg.items():
         if isinstance(value, str) and "{tem_src}" in value:
             cfg[key] = value.replace("{tem_src}", str(cfg["tem_src"]))
+        if is_calibration_key(key):
+            path = cfg[key]
+            if not isinstance(path, str) or not path:
+                raise ValueError(f"{key} needs a site calibration file path")
+            cfg[key] = str(expand(path, case_dir))
     cfg["tem_exe"] = expand(cfg["tem_exe"], case_dir)
     for key in INPUT_KEYS:
         value = cfg[key]
