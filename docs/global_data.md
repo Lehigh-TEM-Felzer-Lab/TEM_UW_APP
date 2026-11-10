@@ -29,7 +29,7 @@ python src/gen_climate_inputs.py --out INPUT --bbox -125 -110 32 49 --start 2000
 ```
 
 Each source writes `climate_<source>.nc` (daily, `tmin`, `tmax`, `prec`, `nirr`, and `dewpoint` or `huss`; `tair` for ERA5 and CMIP6) with the units of the source, and `varmap_<source>.yaml`.
-Set `netcdf_climate_in_file` and `netcdf_climate_in_frequency: daily` and paste the varmap into `run_config.yaml`; the app converts the units and averages to months.
+Set `climate_file` and `netcdf_climate_in_frequency: daily` and paste the varmap into `run_config.yaml`; the app converts the units and averages to months.
 
 | Source | Data | Access |
 |---|---|---|

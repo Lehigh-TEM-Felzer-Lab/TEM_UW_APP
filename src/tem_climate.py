@@ -1,5 +1,9 @@
 # tem_climate.py
-"""Read the input NetCDF file(s) and convert its variables to TEM inputs (monthly or daily) on the model grid."""
+"""Read the input NetCDF file(s) and convert its variables to TEM inputs (monthly or daily) on the model grid.
+
+20261109 Fixed: noleap and 360_day daily or hourly forcing is mapped to the standard calendar before 29
+         February is dropped; monthly precipitation rates are scaled by the days of the month.
+"""
 
 import logging
 import re
@@ -37,29 +41,32 @@ def open_dataset(
     )
     if not paths:
         raise FileNotFoundError(
-            f"No file matches netcdf_climate_in_file: {[str(p) for p in (path if isinstance(path, list) else [path])]}"
+            f"No file matches climate_file: {[str(p) for p in (path if isinstance(path, list) else [path])]}"
         )
     log.info("Reading %d input file(s)", len(paths))
     ds = xr.open_mfdataset(paths, combine="by_coords", chunks={}, engine="netcdf4")
     ds = ds.rename({k: v for k, v in RENAME.items() if k in ds.dims or k in ds.coords})
     ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon").sortby("lat")
-    if "time" in ds.coords and not isinstance(ds.indexes["time"], pd.DatetimeIndex):
+    if (
+        frequency in ("daily", "hourly")
+        and "time" in ds.coords
+        and not isinstance(ds.indexes["time"], pd.DatetimeIndex)
+    ):
         # model calendars (noleap, 360_day): map to the standard calendar, repeating the value
         # before a missing day (29 February) so that every calendar day has a value
         ds = ds.convert_calendar(
             "standard", dim="time", missing=np.nan, use_cftime=False
         )
-        if frequency in ("daily", "hourly"):
-            ds = ds.ffill("time", limit=24 if frequency == "hourly" else 1)
+        ds = ds.ffill("time", limit=24 if frequency == "hourly" else 1)
     lon_min, lon_max, lat_min, lat_max = bbox
     return ds.sel(lon=slice(lon_min, lon_max), lat=slice(lat_min, lat_max))
 
 
 def get(ds: xr.Dataset, varmap: dict, key: str) -> xr.DataArray | None:
     """Variable of the input file that varmap assigns to key, or None if key is not mapped."""
-    if key not in varmap:
+    name = key if key in ds else varmap.get(key)
+    if name is None:
         return None
-    name = varmap[key]
     if name not in ds:
         raise KeyError(f"varmap: '{name}' (TEM input '{key}') is not in the input file")
     if "units" not in ds[name].attrs:
@@ -110,10 +117,10 @@ def precipitation(da: xr.DataArray) -> xr.DataArray:
 
 def radiation(da: xr.DataArray, frequency: str) -> xr.DataArray:
     """Downward shortwave radiation in W m-2; energy per step (J m-2) is divided by the step length."""
-    if (
-        units.Quantity(1.0, da.attrs["units"]).dimensionality
-        == units.Quantity(1.0, "J m-2").dimensionality
-    ):
+    dimension = units.Quantity(1.0, da.attrs["units"]).dimensionality
+    if dimension == units.Quantity(1.0, "J m-2").dimensionality:
+        if frequency == "monthly":
+            return convert(da, "J m-2") / (86400 * da.time.dt.days_in_month)
         return convert(da, "J m-2") / STEP_SECONDS[frequency]
     return convert(da, "W m-2")
 
@@ -124,7 +131,7 @@ def derive(
     """TEM variable name in TEM units on the file's native time step, or None if varmap lacks it."""
 
     def has(*keys: str) -> bool:
-        return all(k in varmap for k in keys)
+        return all(k in ds or k in varmap for k in keys)
 
     def var(key: str) -> xr.DataArray:
         return get(ds, varmap, key)
@@ -173,11 +180,15 @@ def derive(
 
 def monthly(da: xr.DataArray, name: str, frequency: str) -> xr.DataArray:
     """Values per month in TEM units; precipitation becomes mm per month."""
-    if name == "elev" or "month" in da.dims or frequency == "monthly":
+    if name == "elev" or "month" in da.dims:
+        return da
+    if frequency == "monthly":
+        if name == "prec" and da.attrs["kind"] == "rate":
+            return da * da.time.dt.days_in_month
         return da
     if name == "prec":
         if da.attrs["kind"] == "amount":
-            return da.resample(time="MS").sum()
+            return da.resample(time="MS").sum(min_count=1)
         out = da.resample(time="MS").mean()
         return out * out.time.dt.days_in_month
     return da.resample(time="MS").mean()
@@ -188,8 +199,10 @@ def to_grid(
 ) -> xr.DataArray:
     """Regrid to the model grid. box_mean averages the source cells inside each target cell (area
     weighted) when the source is finer; otherwise bilinear or nearest."""
+    if np.isin(lon, da.lon).all() and np.isin(lat, da.lat).all():
+        return da.sel(lon=lon, lat=lat)
     if method == "nearest" or abs(source_res(da) - resolution) < 1e-6:
-        return da.sel(lon=lon, lat=lat, method="nearest", tolerance=resolution / 2)
+        return da.reindex(lon=lon, lat=lat, method="nearest", tolerance=resolution / 2)
     if method == "box_mean" and source_res(da) < resolution * 0.99:
         half = resolution / 2
         dlat = da.lat.values[None, :] - lat[:, None]

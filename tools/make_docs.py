@@ -153,8 +153,8 @@ def pandoc(md: str, out: Path, title: str, subtitle: str) -> None:
         subprocess.run(cmd, check=True, cwd=ROOT / "docs")
 
 
-def patch_notes() -> str:
-    heading = "# I/O and storm patch"
+def compile_options() -> str:
+    heading = "# Compile-time options"
     readme = (ROOT / "README.md").read_text()
     body = readme.split(heading + "\n", 1)[1].split("\n# ", 1)[0]
     return f"{heading}\n{body.strip()}\n"
@@ -165,7 +165,7 @@ def key_reference() -> str:
         "# Overview\n",
         "`config/run_config.yaml` is the run configuration of TEM_UW_APP. A case-local `run_config.yaml` sets only the keys it changes; unknown keys are an error. The sections below are the file itself. Keys of the section Model options are written to `tem_config.yaml` of TEM_2026, whose template describes them in more detail.\n",
     ]
-    out.append(patch_notes())
+    out.append(compile_options())
     block: list[str] = []
     started = False
     for line in (ROOT / "config" / "run_config.yaml").read_text().splitlines():

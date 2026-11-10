@@ -27,17 +27,19 @@ make -C TEM_2026 mpi -j4              # MPI, for n_cpus > 1: build_mpi/xtem
 export TEM_UW_APP_ROOT=$PWD
 ```
 
+TEM_2026 needs g++ 9 or later, make, libyaml and libnetcdf (C). The serial build needs only `netcdf`; the MPI build needs the MPI-enabled `netcdf-mpi` with `hpcx-mpi` or `openmpi` (module names vary by site).
+
 # Running a case
 
-See [the call hierarchy](flowchart.md) for the entry points and model execution.
+The call hierarchy of the model is in the [flowchart of TEM_2026](https://github.com/Lehigh-TEM-Felzer-Lab/TEM_2026/blob/main/flowchart.md).
 
 1. Copy `examples/west/run_config.yaml` to an empty directory.
-2. Set `tem_src` (the TEM_2026 checkout), the climate files, the box and the years. For `n_cpus > 1` set `tem_exe: "{tem_src}/build_mpi/xtem"`.
+2. Set `tem_src` (the TEM_2026 checkout), the climate files, the box and the years. For `n_cpus` above 1 build `make mpi`; set `competition: 1` for cohorts that take each step together.
 3. Run `$TEM_UW_APP_ROOT/case_submit.sh` from that directory. With `run_mode: slurm` it submits with sbatch; with `run_model: false` it only builds the case.
 
 ```
 run_config.yaml   tem_config.yaml
-INPUT/            climate.nc static.nc lulc.nc co2.nc (lightning.nc population.nc)
+INPUT/            climate.nc static.nc lulc.nc co2.nc (flash.nc popdens.nc)
 OUTPUT/           tem.nc, written by the model
 logs/
 ```
@@ -48,12 +50,15 @@ logs/
 
 | Key | Description |
 |---|---|
-| `tem_src`, `tem_exe` | TEM_2026 checkout and executable (default `{tem_src}/build/xtem`) |
-| `netcdf_climate_in_file`, `netcdf_climate_in_frequency` | climate files (path, glob or list) and their time step (hourly, daily, monthly) |
-| `netcdf_static_in_file`, `netcdf_lulc_in_file`, `netcdf_co2_in_file` | static, land-cover and CO2 files in the layout of TEM_2026 `docs/io_structure.md` |
-| `netcdf_fire_in_file`, `netcdf_population_in_file` | lightning flashes and population density, needed when `veg_fire: 1` |
+| `tem_src`, `tem_exe` | TEM_2026 checkout and executable (default chosen from `n_cpus` and `run_dt_units`, see Compile-time options) |
+| `climate_file`, `netcdf_climate_in_frequency` | climate files (path, glob or list) and their time step (hourly, daily, monthly) |
+| `static_file`, `lulc_file`, `co2_file` | static, land-cover and CO2 files in the layout of TEM_2026 `docs/io_structure.md` |
+| `lightning_file`, `population_file` | lightning flashes and population density, needed when `veg_fire: 1` |
+| `gdp_file`, `cropfire_file` | optional: with `gdp_file` (`gdp`) the fire model adds the GDSTEM-FIRE terms (the vegetation file needs `fsr`, `fd`, `rswf_min`, `rswf_max`); `cropfire_file` (`cropfire_month`) is optional; staged as `gdp.nc` and `crop.nc` |
+| `storm_file`, `nfert_file` | storm return intervals (`storm_disturbance: true`) and N fertilizer (`xnfertflag`), layout in TEM_2026 `docs/io_structure.md` |
 | `varmap` | `<model variable>: <variable in your files>`; the model name is used first, the map only when the file lacks it |
 | `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
+| `start_year`, `run_length`, `run_length_units` | first year and duration in any unit (seconds to years, converted to seconds) from 1 January; the app stages climate with exactly that many steps |
 | `spinflag`, `veg_fire`, `xnfertflag`, ... | the options of `tem_config.yaml`, one key each |
 | `cmntecd`, `vegecd`, ... | parameter files, by default `{tem_src}/params/biogeography/` |
 | `output_file` | native NetCDF output path, default `./OUTPUT/tem.nc` |
@@ -72,36 +77,18 @@ hvc_dat: "{tem_src}/params/biogeography/hvc50_openn_dndc.yaml"
 hvd_dat: "{tem_src}/params/biogeography/hvd50_openn_dndc.yaml"
 ```
 
-# I/O and storm patch
+# Compile-time options
 
-Apply `TEM_UW_APP-io.patch` with `git am` from this repository.
+These are options of the TEM_2026 build, not of this app. Pass them to `make` in the TEM_2026 checkout, for example `make mpi -j16 OPEN_N=0 STORM=0`. Changing an option rebuilds the objects of that build directory.
 
-The case launcher stages NetCDF and writes the model YAML directly, including
-the output-variable sequences. Legacy ASCII and XML conversion tools are
-removed. Source adapters still ingest public data for the NetCDF builders.
+| Option | Default | Effect |
+|---|---|---|
+| `OPEN_N` | 1 | 1 open nitrogen cycle, 0 closed |
+| `STORM` | 1 | 1 includes stochastic tropical storm and hurricane damage, enabled by `storm_disturbance: true` and `storm_file`; 0 omits it and rejects `storm_disturbance: true`. Prescribed land-cover disturbances are always available |
+| `CXXFLAGS` | `-O2` | an unoptimised build gives different numbers |
+| `CXX` | `g++` | compiler; `make mpi` uses `mpicxx` |
 
-Stochastic tropical storm and hurricane damage requires a TEM_2026 build
-with `STORM=1`, the default. Use `make STORM=0` to build the core without
-the feature. Set the following keys in `run_config.yaml` to enable it.
-
-```yaml
-storm_disturbance: true
-netcdf_storm_in_file: /data/storm.nc
-```
-
-| NetCDF variable | Dimensions | Units |
-| --- | --- | --- |
-| `lat` | `lat` | `degrees_north` |
-| `lon` | `lon` | `degrees_east` |
-| `storm_return_interval` | `lat, lon` | `years` |
-| `hurricane_return_interval` | `lat, lon` | `years` |
-
-Use one static NetCDF dataset with both return-interval fields on the same
-rectilinear grid. Zero disables the corresponding event. Positive intervals
-must be finite and at least one year. The model reads NetCDF content
-regardless of the filename extension. Generated files default to `.nc`.
-
-The app regrids and stages the dataset as `INPUT/storm.nc`.
+Every build makes one executable, `xtem`, which runs monthly and daily steps (`run_dt`, `run_dt_units`, converted to seconds) and cohorts in turn or together (`competition`). Without `tem_exe` the app picks `build/xtem`, or `build_mpi/xtem` when `n_cpus` is above 1.
 
 # Input data
 
@@ -127,14 +114,14 @@ units and the land-cover assumptions are in [docs/global_data.md](docs/global_da
 
 | File | Content |
 | --- | --- |
-| [TEM_UW_APP-Technical-Description.pdf](TEM_UW_APP-Technical-Description.pdf) | App workflow, I/O patch, and input sources |
-| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | App YAML configuration reference |
+| [TEM_UW_APP-Technical-Description.pdf](TEM_UW_APP-Technical-Description.pdf) | build options, workflow and input sources |
+| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | `run_config.yaml` key reference |
 
 The [run configuration](config/run_config.yaml) lists keys, defaults, and meanings.
 `python tools/make_docs.py` builds PDF copies of the configuration reference and technical description (needs Pandoc and XeLaTeX).
 
 # Limits
 
-- The app writes monthly or daily forcing (`run_dt_units` is `month` or `day`; daily needs daily forcing, `netcdf_climate_in_frequency` set to `daily`, and a TEM_2026 build from `make daily`). Daily physics is not validated.
+- The app writes monthly or daily forcing (`run_dt` is one month or one day, written in any unit; daily needs daily forcing, `netcdf_climate_in_frequency` set to `daily`). Daily results were not compared with observations.
 - Tested on the western United States example only; the inputs the app writes for it are identical to those shipped with TEM_2026.
 - The global land-cover builder is not validated against the lab's earlier inputs.

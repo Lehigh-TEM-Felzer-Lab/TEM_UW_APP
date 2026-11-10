@@ -1,4 +1,4 @@
-"""Download climate forcing and write one daily NetCDF file for the app (netcdf_climate_in_file).
+"""Download climate forcing and write one daily NetCDF file for the app (climate_file).
 
 The file holds the variables tmin, tmax, prec, nirr and dewpoint or huss (tair as well for ERA5) with the units of the source,
 on the time axis of the source, cut to --bbox LON_MIN LON_MAX LAT_MIN LAT_MAX and the years --start..--end.

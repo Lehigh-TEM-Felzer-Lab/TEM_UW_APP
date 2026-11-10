@@ -50,7 +50,7 @@ def main() -> int:
 
     # tasks per node n_cpus // n_nodes; the task count is rounded to a multiple of n_nodes
     per_node = cfg["n_cpus"] // cfg["n_nodes"]
-    tasks = per_node * cfg["n_nodes"]
+    tasks = tem_config.mpi_tasks(cfg)
     cmd = [
         "sbatch",
         f"--job-name={cfg['case_name']}",

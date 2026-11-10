@@ -11,11 +11,13 @@ TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store). TEM_
 every command.
 
 Climate is ERA5 daily statistics of one year, downloaded by src/gen_climate_inputs.py (CDS dataset derived-era5-single-levels-daily-statistics). The monthly
-case aggregates it to months, the daily case runs the 365 days of that year (the model cannot stop within a year).
+case aggregates it to months, the daily case runs the 365 days of that year (set run_length: 7 with run_length_units: days to stop after a week).
 Every other input is made by src/gen_static_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
 wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) and N deposition (ISIMIP3b). Ozone comes from
 CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (docs/global_data.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
 (AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
+
+20261109 Changed: one build_mpi of TEM_2026 runs the monthly and the daily case (build_mpi_daily removed).
 """
 
 import argparse
@@ -53,8 +55,8 @@ FAST_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years
 # name -> (flag, overrides of run_config.yaml); "exe" selects the executable, "needs" a case that runs first
 CASES = {
     "monthly": ("", {"ostateflag": 1}),
-    "daily": ("", {"run_dt_units": "day", "exe": "daily", **DAILY_EQUIL}),
-    "competition": ("competition", {"exe": "competition"}),
+    "daily": ("", {"run_dt_units": "day", **DAILY_EQUIL}),
+    "competition": ("competition", {"competition": 1}),
     "fire": ("fire", {"veg_fire": 1, "fire_seed": 1, "fire": True}),
     "fire_expected": (
         "fire",
@@ -130,32 +132,17 @@ def clone(work: Path) -> None:
 
 
 def build(work: Path, jobs: int, flags: set[str], only: list[str] | None) -> None:
-    """build_mpi/ for the monthly cases, build_mpi_daily/ (366 steps per year) for the daily case."""
+    """build_mpi/, which runs the monthly and the daily cases."""
     src = work / "repos" / "TEM_2026"
-    names = only or [n for n, v in CASES.items() if not v[0] or v[0] in flags]
     if shutil.which("mpicxx") is None and not os.environ.get("TEM_MODULES"):
         sys.exit(
             "mpicxx not found: load an MPI module (export TEM_MODULES='gcc openmpi netcdf' or module load in the job script)"
         )
-    if any(CASES[n][1].get("exe") != "daily" for n in names):
-        need(
-            ["make", f"-j{jobs}", "MPI=1", "BUILD=build_mpi", "all"],
-            cwd=src,
-            log=work / "build_monthly.log",
-        )
-    if any(CASES[n][1].get("exe") == "daily" for n in names):
-        need(
-            [
-                "make",
-                f"-j{jobs}",
-                "MPI=1",
-                "BUILD=build_mpi_daily",
-                "MAXCYCLE=366",
-                "all",
-            ],
-            cwd=src,
-            log=work / "build_daily.log",
-        )
+    need(
+        ["make", f"-j{jobs}", "MPI=1", "BUILD=build_mpi", "all"],
+        cwd=src,
+        log=work / "build.log",
+    )
     say("built TEM_2026")
 
 
@@ -276,10 +263,7 @@ def run_case(
     if args.force and case.exists():
         shutil.rmtree(case)
     case.mkdir(parents=True, exist_ok=True)
-    exe = {
-        "daily": "build_mpi_daily/xtem",
-        "competition": "build_mpi/xtem_competition",
-    }.get(over.pop("exe", ""), "build_mpi/xtem")
+    exe = "build_mpi/xtem"
     needs = over.pop("needs", None)
     cfg = {
         "tem_src": str(work / "repos" / "TEM_2026"),
@@ -291,12 +275,13 @@ def run_case(
         "horizontal_resolution": 1.0,
         **BOX,
         "start_year": YEAR,
-        "end_year": YEAR,
-        "netcdf_climate_in_file": str(climate),
+        "run_length": 1,
+        "run_length_units": "years",
+        "climate_file": str(climate),
         "netcdf_climate_in_frequency": "daily",
-        "netcdf_static_in_file": str(data / "static.nc"),
-        "netcdf_lulc_in_file": str(data / "lulc.nc"),
-        "netcdf_co2_in_file": str(data / "co2.nc"),
+        "static_file": str(data / "static.nc"),
+        "lulc_file": str(data / "lulc.nc"),
+        "co2_file": str(data / "co2.nc"),
         "varmap": VARMAP,
         "clmoutvars": ["tair"],
         "temoutvars": OUTVARS,
@@ -310,8 +295,8 @@ def run_case(
                 "note": "skipped: no flash.nc or popdens.nc",
             }
         cfg |= {
-            "netcdf_fire_in_file": str(data / "flash.nc"),
-            "netcdf_population_in_file": str(data / "popdens.nc"),
+            "lightning_file": str(data / "flash.nc"),
+            "population_file": str(data / "popdens.nc"),
         }
     if args.fast and over.get("run_dt_units") != "day":
         cfg |= FAST_EQUIL
@@ -354,7 +339,7 @@ def run_case(
 def archive(work: Path, keep_inputs: bool) -> Path:
     path = work / f"archive_{datetime.now(tz=UTC):%Y%m%d_%H%M%S}.tar.gz"
     with tarfile.open(path, "w:gz") as t:
-        for f in ("summary.yaml", "build_monthly.log", "build_daily.log"):
+        for f in ("summary.yaml", "build.log"):
             if (work / f).exists():
                 t.add(work / f, arcname=f)
         for sub in ("logs",):

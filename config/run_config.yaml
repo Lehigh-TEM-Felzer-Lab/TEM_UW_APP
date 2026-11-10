@@ -12,11 +12,14 @@
 #   0. Job environment (system)
 #   1. Job submission (SLURM)
 #   2. Case metadata
-#   3. Grid and time
+#   3. Grid and regridding
 #   4. NetCDF inputs and varmap
-#   5. Model options (keys of tem_config.yaml)
-#   6. Parameter files
-#   7. Output and model state
+#   5. Input options
+#   6. Run control
+#   7. Initialization and equilibrium
+#   8. Processes
+#   9. Output and model state
+#  10. Parameter and site files
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -24,7 +27,7 @@
 # -----------------------------------------------------------------------------
 
 tem_src: null # TEM_2026 checkout: templates/tem_config.yaml, params/ and the build (REQUIRED)
-tem_exe: "{tem_src}/build/xtem" # Executable built with make (build/xtem_competition for cohort competition); for n_cpus > 1 use the MPI build, {tem_src}/build_mpi/xtem
+tem_exe: null # Auto-select build/xtem or build_mpi/xtem from n_cpus
 modules: [] # Modules loaded before the run (the libraries the executable was built with)
 
 # -----------------------------------------------------------------------------
@@ -67,7 +70,7 @@ case_name: null # Case identifier and SLURM job name; null falls back to the dir
 region: TEM # Label written to the output files
 
 # -----------------------------------------------------------------------------
-# 3. GRID AND TIME (the core does no regridding; this app does it)
+# 3. GRID AND REGRIDDING (the core does no regridding; this app does it)
 # -----------------------------------------------------------------------------
 
 horizontal_resolution: 0.5 # degrees
@@ -76,26 +79,25 @@ lon_max: null # REQUIRED
 lat_min: null # REQUIRED
 lat_max: null # REQUIRED
 regrid_method: box_mean # box_mean (area average, when the source is finer) | bilinear | nearest. Categorical fields always use nearest.
-run_dt: 1 # Model time step, 1
-run_dt_units: month # month | day. day needs daily forcing (netcdf_climate_in_frequency: daily) and a build with room for 365 steps (make daily)
-start_year: null # First year of the transient run (REQUIRED)
-end_year: null # Last year of the transient run (REQUIRED)
 
 # -----------------------------------------------------------------------------
 # 4. NETCDF INPUTS AND VARMAP
 # -----------------------------------------------------------------------------
 # Each key is a path, a glob or a list of them (null: not used). The files are regridded to the
-# grid above and written to INPUT/ as climate.nc, static.nc, lulc.nc, co2.nc, lightning.nc and
-# population.nc. Floats are written as float32 and categorical fields as int64.
+# grid above and written to INPUT/ as climate.nc, static.nc, lulc.nc, co2.nc, flash.nc and
+# popdens.nc. Floats are written as float32 and categorical fields as int64.
 
-netcdf_climate_in_file: null # Climate (REQUIRED), merged by coordinates; units come from the "units" attribute
-netcdf_climate_in_frequency: monthly # hourly | daily | monthly, the time step of netcdf_climate_in_file
-netcdf_static_in_file: null # elev, sand, silt, clay, ndep (lat, lon); wind, ozone (month, lat, lon)
-netcdf_lulc_in_file: null # Land cover, (cohort, lat, lon); the fields of TEM_2026 docs/data.md
-netcdf_co2_in_file: null # co2 (time), annual
-netcdf_fire_in_file: null # lightning_flashes, km-2 month-1 (12 months, lat, lon); needed when veg_fire is 1
-netcdf_population_in_file: null # population_density, km-2 (lat, lon); needed when veg_fire is 1
-netcdf_storm_in_file: null # NetCDF return-interval grids in years, needed when storm_disturbance is true
+climate_file: null # Climate (REQUIRED), merged by coordinates; units come from the "units" attribute
+netcdf_climate_in_frequency: monthly # hourly | daily | monthly, the time step of climate_file
+static_file: null # elev, sand, silt, clay, ndep (lat, lon); wind, ozone (month, lat, lon)
+lulc_file: null # Land cover, (cohort, lat, lon); the fields of TEM_2026 docs/data.md
+co2_file: null # co2 (time), annual
+lightning_file: null # lightning_flashes, km-2 month-1 (12 months, lat, lon); needed when veg_fire is 1
+population_file: null # population_density, km-2 (lat, lon); needed when veg_fire is 1
+gdp_file: null # gdp, GDP per capita (lat, lon); optional: with it the fire model adds the GDSTEM-FIRE terms (CLM5 surface data or Kummu et al. 2018, doi:10.5061/dryad.dk1j0; docs in TEM_2026 io_structure.md)
+cropfire_file: null # cropfire_month, month of crop burning 1-12 (lat, lon); optional, with gdp_file (month of agricultural burning, CLM5 surface data)
+storm_file: null # NetCDF return-interval grids in years, needed when storm_disturbance is true
+nfert_file: null # nfertcrop and nfertpasture, needed when xnfertflag is positive
 surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
 
 # varmap (flat): <model variable>: <variable in your files>. The model variable is used as it is when
@@ -103,15 +105,37 @@ surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
 #   climate (REQUIRED, derived to TEM units):  tair or tmin + tmax;  dtr or tmin + tmax;  prec;  nirr;
 #       vpr or dewpoint or huss (+ ps)
 #   optional from the climate files:  wind or u10 + v10;  elev
-#   passed to the model for the other files:  texture (sand+silt+clay), lulc, co2, ozone,
+#   passed to the model for the other files:  sand, silt, clay, lulc, co2, ozone,
 #       ndep, wind, elev, lightning, popdens, nfertcrop, nfertpasture, mask
 varmap: {}
 
 # -----------------------------------------------------------------------------
-# 5. MODEL OPTIONS (keys of TEM_2026 templates/tem_config.yaml, whose comments describe them)
+# 5. INPUT OPTIONS (keys of TEM_2026 templates/tem_config.yaml, whose comments describe them)
 # -----------------------------------------------------------------------------
 
-# Initialization and equilibrium
+xtco2flag: 1 # 1: transient CO2 from co2_file | 0: static
+xto3flag: 0 # 1: transient ozone | 0: long-term average
+xtndepflag: 0 # 1: transient N deposition | 0: long-term average
+xtws10flag: 0 # 1: transient wind | 0: long-term average
+xnfertflag: 0 # 0: built-in fertilizer series | 1: annual input without time | 2: transient input
+tlulcflag: 0 # 1: transient land use
+initco2: 286.596 # ppmv at the start
+xco2level: 286.596 # ppmv of the equilibrium
+
+# -----------------------------------------------------------------------------
+# 6. RUN CONTROL
+# -----------------------------------------------------------------------------
+
+run_dt: 1 # Model time step: a count of run_dt_units
+run_dt_units: month # second | minute | hour | day | week | month | year, converted to seconds. The app stages a step of 1 month or 1 day (24 hours, 86400 seconds); a daily step needs netcdf_climate_in_frequency: daily
+start_year: null # First year of the run; the climate years from here on are read (REQUIRED)
+run_length: null # Duration of the transient run, in run_length_units (REQUIRED)
+run_length_units: null # any unit of run_dt_units, converted to seconds and counted from 1 January of start_year (REQUIRED); the run must be a whole number of steps
+
+# -----------------------------------------------------------------------------
+# 7. INITIALIZATION AND EQUILIBRIUM
+# -----------------------------------------------------------------------------
+
 spinflag: 0 # 0: equilibrate to long-term average climate | 1: then numspin spins | 2: dynamic equilibrium
 numspin: 3 # Spins when spinflag is 1
 spintime: 40 # Years per spin
@@ -124,45 +148,55 @@ equil_rh: 1 # 1: decomposition must reach equilibrium
 wtol: 1.0 # Tolerance of the water cycle
 ctol: 100.0 # Tolerance of the carbon cycle
 ntol: 20.0 # Tolerance of the nitrogen cycle
+inittol: 0.01 # Proportional tolerance of the integrator
+maxit: 20 # Iterations of the integrator per month
+maxitmon: 200 # Times maxit can be reached in a month
+istateflag: 0 # 0: initialize | 1: read the state at equilibrium | 2: read the state of istateyear
+istatefile: ./OUTPUT/temstate.nc # State file read
+istateyear: 0 # Year of the state read when istateflag is 2
 
-# Processes
+# -----------------------------------------------------------------------------
+# 8. PROCESSES
+# -----------------------------------------------------------------------------
+
 avlnflag: 1 # Available N may vary
 nfeed: 1 # N feedback on GPP
 baseline: 0 # Solve for baseline soil N
 moistlim: 1 # Moisture limitation of GPP
 o3flag: 1 # Ozone damage to GPP
+dc2n: 0.0 # Relative change of C:N per change in CO2
 ode_solver: 1 # 1 Bogacki-Shampine | 2 Runge-Kutta-Fehlberg
 rsoil_method: 2 # 1 Q10 | 2 SiB
 rhmoist_method: 1 # 1 WFPS | 2 DNDC | 3 sech
 wood_pools: 0 # 0: standing dead only | 1: GDSTEM-FIRE standing dead, CWD and FWD pools
-dc2n: 0.0 # Relative change of C:N per change in CO2
-inittol: 0.01 # Proportional tolerance of the integrator
-maxit: 20 # Iterations of the integrator per month
-maxitmon: 200 # Times maxit can be reached in a month
-
-# Atmosphere, fire and fertilizer
-initco2: 286.596 # ppmv at the start
-xco2level: 286.596 # ppmv of the equilibrium
-xtco2flag: 1 # 1: transient CO2 from netcdf_co2_in_file | 0: static
-xto3flag: 0 # 1: transient ozone | 0: long-term average
-xtndepflag: 0 # 1: transient N deposition | 0: long-term average
-xtws10flag: 0 # 1: transient wind | 0: long-term average
-xnfertflag: 0 # 0: built-in fertilizer series | 1: annual input without time | 2: transient input
-veg_fire: 0 # 1: wildfire; needs netcdf_fire_in_file, netcdf_population_in_file and monthly steps
-storm_disturbance: false # Enable transient storm and hurricane damage. Needs a STORM=1 build.
+agtillflag: 0 # Tilling
+agirrgflag: 0 # Irrigation
+agfertflag: 0 # Fertilizer
+competition: 0 # 1: the cohorts of a cell take each step together (TEM_2026 competition key)
+veg_fire: 0 # 1: wildfire; needs lightning_file and population_file; any run_dt. With gdp_file the GDSTEM-FIRE terms are added
 fire_mode: 0 # 0: random draw | 1: expected burn
 fire_topography: 0 # 1: fire 250 times less likely above 2500 m
 fire_seed: 0 # Fixes the random sequence (0: not fixed)
 fire_prescribed_end: 2014 # Last year in which the vegetation return interval applies
-tlulcflag: 0 # 1: transient land use
-
-# Agriculture
-agtillflag: 0 # Tilling
-agirrgflag: 0 # Irrigation
-agfertflag: 0 # Fertilizer
+storm_disturbance: false # Enable transient storm and hurricane damage. Needs a STORM=1 build.
 
 # -----------------------------------------------------------------------------
-# 6. PARAMETER FILES
+# 9. OUTPUT AND MODEL STATE
+# -----------------------------------------------------------------------------
+
+clmoutvars: [tair] # Climate variables written (lowercase model names)
+temoutvars: [gpp, npp, nep, vegc, soilorgc] # TEM variables written
+output_file: ./OUTPUT/tem.nc # Native TEM output, relative to the case directory
+output_new_file_freq: 0 # 0: one file. Split output is available for TEM-only runs.
+output_new_file_freq_units: year
+spinoutflag: 0 # 1: also write the spin-up years
+spinoutyrs: 0 # Number of spin-up years written
+ostateflag: 0 # 0: no state written | 1: at equilibrium | 2: at ostateyear
+ostatefile: ./OUTPUT/temstate.nc # State file written (ranks are merged into it)
+ostateyear: 0 # Year of the state written when ostateflag is 2
+
+# -----------------------------------------------------------------------------
+# 10. PARAMETER AND SITE FILES
 # -----------------------------------------------------------------------------
 # One set of params/ per run: biogeography, gdstem, gdstem_fire or glstem.
 
@@ -189,19 +223,3 @@ kbm_dat: "{tem_src}/params/biogeography/kbm50_openn_303.yaml"
 turf_dat: "{tem_src}/params/biogeography/turf50_openn_303.yaml"
 knz_ag2_dat: "{tem_src}/params/biogeography/knz50_openn_303_ag2.yaml"
 rodale_ag2_dat: "{tem_src}/params/biogeography/rodale_openn_303_ag2.yaml"
-
-# -----------------------------------------------------------------------------
-# 7. OUTPUT AND MODEL STATE
-# -----------------------------------------------------------------------------
-
-output_file: ./OUTPUT/tem.nc # Native TEM NetCDF output, relative to the case directory
-clmoutvars: [tair] # Climate variables written (lowercase model names)
-temoutvars: [gpp, npp, nep, vegc, soilorgc] # TEM variables written
-spinoutflag: 0 # 1: also write the spin-up years
-spinoutyrs: 0 # Number of spin-up years written
-istateflag: 0 # 0: initialize | 1: read the state at equilibrium | 2: read the state of istateyear
-istatefile: ./OUTPUT/temstate.nc # State file read
-istateyear: missing # Year of the state read when istateflag is 2
-ostateflag: 0 # 0: no state written | 1: at equilibrium | 2: at ostateyear
-ostatefile: ./OUTPUT/temstate.nc # State file written (ranks are merged into it)
-ostateyear: missing # Year of the state written when ostateflag is 2
