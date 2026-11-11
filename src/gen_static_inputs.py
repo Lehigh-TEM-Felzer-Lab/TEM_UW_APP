@@ -1,12 +1,12 @@
-"""Download global datasets and write the TEM_2026 input files for a region.
+"""Download global datasets and write the XTEM input files for a region.
 
 Each subcommand writes one file of INPUT/ on the grid given by --bbox LON_MIN LON_MAX LAT_MIN LAT_MAX (default: the globe) and --res
 (cell centres on multiples of res from the minimum). The subcommand all writes every static input including lulc.nc.
 See technical_desc.md of TEM_UW_APP for the sources, units and caveats.
 
-    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 --res 0.5 all --cohorts primary secondary crops
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 --res 0.5 all --tcomm ../XTEM/params/gdstem/tcomm45_lulc.yaml --cohorts primary secondary crops
     python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 co2 --start 2015 --end 2100
-    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 lulc --year 2015 --cohorts primary --min-area 10
+    python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 lulc --tcomm ../XTEM/params/gdstem/tcomm45_lulc.yaml --year 2015 --cohorts primary --min-area 10
 """
 
 import argparse
@@ -45,7 +45,7 @@ LAYERS = {
     "5-15cm": 10,
     "15-30cm": 15,
 }  # SoilGrids layers of the top 30 cm and their thickness [cm]
-# Ramankutty and Foley (1999) potential vegetation class -> TEM potveg (params/biogeography/tcomm45_lulc.yaml)
+# Ramankutty and Foley (1999) potential vegetation class -> TEM potveg (numbers of params/biogeography/tcomm45_lulc.yaml; apply_tcomm renumbers them for the parameter set of the run)
 POTVEG_TO_TEM = {
     1: 16,
     2: 18,
@@ -501,8 +501,47 @@ def ndep(a: argparse.Namespace) -> None:
     )
 
 
+LEGACY_ALIASES = {"crops": "c3annualcrops"}  # name in params/biogeography -> name in params/gdstem
+
+
+def apply_tcomm(path: str) -> None:
+    """Number the TEM vegetation types of the tables above as in the tcomm45_lulc.yaml of the parameter set of the run.
+
+    The tables are written with the numbering of params/biogeography. The numbers of the types differ between parameter sets
+    (params/gdstem has 62 types, with 13 temperate forested wetlands where params/biogeography has short grasslands), so each
+    type is found again by its description. A type that the set does not have stops the run."""
+    global POTVEG_TO_TEM, COHORTS, MIXED, VEG_TYPES, VEG_NAMES
+    import re
+
+    def norm(n: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", n.lower())
+
+    entries = re.findall(r"type: (\d+)\n\s+description: (.*)", Path(path).read_text())
+    if not entries:
+        raise SystemExit(f"{path} has no temveg entries with a description")
+    new = {norm(d): int(t) for t, d in entries}
+    legacy = {i + 1: n for i, n in enumerate(VEG_NAMES)}
+
+    def conv(k: int) -> int:
+        n = norm(legacy[k])
+        n = LEGACY_ALIASES.get(n, n)
+        if n not in new:
+            raise SystemExit(f"{path} has no vegetation type '{legacy[k]}', which the land-cover tables use")
+        return new[n]
+
+    POTVEG_TO_TEM = {k: conv(v) for k, v in POTVEG_TO_TEM.items()}
+    COHORTS = {k: (st, None if v is None else conv(v), *r) for k, (st, v, *r) in COHORTS.items()}
+    MIXED = {conv(k): tuple(conv(c) for c in v) for k, v in MIXED.items()}
+    order = sorted(entries, key=lambda e: int(e[0]))
+    VEG_TYPES = [int(t) for t, _ in order]
+    VEG_NAMES = tuple(re.sub(r"[^A-Za-z0-9]+", "_", d.strip()).strip("_") for _, d in order)
+
+
 def lulc(a: argparse.Namespace) -> None:
     """Cohorts of each cell from the LUH2 states of one year and the Ramankutty and Foley potential vegetation."""
+    if not a.tcomm:
+        raise SystemExit("lulc: pass --tcomm, the tcomm45_lulc.yaml of the parameter set of the run (XTEM/params/gdstem/tcomm45_lulc.yaml); the type numbers differ between sets")
+    apply_tcomm(a.tcomm)
     lon, lat = target(a)
     pv_tar = fetch(POTVEG, Path(a.cache))
     with tarfile.open(pv_tar) as t:
@@ -600,7 +639,6 @@ def lulc(a: argparse.Namespace) -> None:
             "standage": (dims, age),
             "chrtarea": (dims, chrt, {"units": "km2"}),
             **{k: (dims, v) for k, v in out.items()},
-            "FRI": (dims, np.where(has, 2000.0, np.nan).astype("float32")),
         },
         coords={
             "cohort": np.arange(1, len(slots) + 1, dtype="int64"),
@@ -735,6 +773,7 @@ def main() -> None:
         c.set_defaults(f=f)
     for name, f in (("lulc", lulc), ("all", everything)):
         c = sub.add_parser(name)
+        c.add_argument("--tcomm", help="tcomm45_lulc.yaml of the parameter set of the run; numbers the vegetation types")
         c.add_argument("--luh2", help="LUH2 states.nc; downloaded if not given")
         c.add_argument("--luh2-static", help="LUH2 staticData_quarterdeg.nc")
         c.add_argument("--year", type=int, default=2015, help="year of the LUH2 states")

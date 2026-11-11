@@ -1,5 +1,5 @@
 # time_units.py
-"""Times in seconds, as TEM_2026 converts them (tem_core/tem_time.h): units, run length and the model step.
+"""Times in seconds, as XTEM converts them (tem_core/tem_time.h): units, run length and the model step.
 
 20261110 Created: run_dt and run_length in any unit (second, minute, hour, day, week, month, year) are converted
          to seconds on the 365-day noleap year; the app stages monthly or daily forcing, so it accepts a step of

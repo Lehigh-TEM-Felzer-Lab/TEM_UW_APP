@@ -4,14 +4,14 @@ Build options, the workflow and the keys of `run_config.yaml` are in [README.md]
 
 # Global input data
 
-`src/gen_static_inputs.py` writes the input files of TEM_2026 for any bounding box and resolution (run it from the root of TEM_UW_APP).
+`src/gen_static_inputs.py` writes the input files of XTEM for any bounding box and resolution (run it from the root of TEM_UW_APP).
 The commands below are for a 0.5 degree box over the western United States; `--bbox` takes `LON_MIN LON_MAX LAT_MIN LAT_MAX` and defaults to the globe.
 Needs `pip install xarray netcdf4 pandas scipy rioxarray` and `wget`.
 
 ```bash
 A="--out INPUT --cache downloads --bbox -125 -110 32 49 --res 0.5"
 python src/gen_static_inputs.py $A co2 --start 2015 --end 2024
-python src/gen_static_inputs.py $A all --year 2015 --cohorts primary secondary crops pasture urban --min-area 1
+python src/gen_static_inputs.py $A all --tcomm XTEM/params/gdstem/tcomm45_lulc.yaml --year 2015 --cohorts primary secondary crops pasture urban --min-area 1
 ```
 
 `all` writes `elev.nc`, `soil.nc`, `wind.nc`, `ozone.nc`, `ndep.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc`; the ozone and lightning steps are skipped with a message if their login is missing
@@ -47,7 +47,7 @@ The files for nitrogen fertilizer and for yearly land-cover change are not gener
 
 ## What the model needs from the files
 
-All files of a run must be on the same grid (the same `lon` and `lat` values, so the same resolution) and every file with a time axis must start in `clmstartyr`, be regular at the model step, a month or a year, and cover the run; `time` carries CF units (`days since ...`, `noleap`, `365_day` or `standard` calendar). TEM_2026 checks this at load and stops with the file and the values that differ (`tem_core/tem_input_check.cpp`), so use one `--bbox` and one `--res` for every step. A cell runs where `lulc.nc` has a cohort and, if a `mask` is mapped in `varmap`, where the mask is above 0; every other input must have data there. The fire files below are needed only with `veg_fire: 1`, and `gdp.nc` and `crop.nc` only for the GDSTEM-FIRE terms.
+All files of a run must be on the same grid (the same `lon` and `lat` values, so the same resolution) and every file with a time axis must start in `clmstartyr`, be regular at the model step, a month or a year, and cover the run; `time` carries CF units (`days since ...`, `noleap`, `365_day` or `standard` calendar). XTEM checks this at load and stops with the file and the values that differ (`tem_core/tem_input_check.cpp`), so use one `--bbox` and one `--res` for every step. A cell runs where `lulc.nc` has a cohort and, if a `mask` is mapped in `varmap`, where the mask is above 0; every other input must have data there. The fire files below are needed only with `veg_fire: 1`, and `gdp.nc` and `crop.nc` only for the GDSTEM-FIRE terms.
 
 ## Fire inputs
 
@@ -60,7 +60,7 @@ python src/gen_static_inputs.py $A gdp --file downloads/GDP_per_capita_PPP_1990_
 python src/gen_static_inputs.py $A cropfire --file downloads/surfdata_clm5.nc --var abm_lf
 ```
 
-`gdp.nc` has `gdp` (thousand US dollars per person, `lat`, `lon`) and `crop.nc` has `cropfire_month`; set `gdp_file` and `cropfire_file` in `run_config.yaml`. The file and variable names above are those I expect for these datasets and were not checked against the downloads: list the variables of your file (`ncdump -h`) and pass the right `--var`. The commands were tested only on synthetic files with the same layout. The model also needs per-community fire parameters in the vegetation YAML (`fsr`, `fd`, `rswf_min`, `rswf_max`), which `params/` of TEM_2026 has. The fire return interval `FRI` of `lulc.nc` is 2000 years.
+`gdp.nc` has `gdp` (thousand US dollars per person, `lat`, `lon`) and `crop.nc` has `cropfire_month`; set `gdp_file` and `cropfire_file` in `run_config.yaml`. The file and variable names above are those I expect for these datasets and were not checked against the downloads: list the variables of your file (`ncdump -h`) and pass the right `--var`. The commands were tested only on synthetic files with the same layout. The model also needs per-community fire parameters in the vegetation YAML (`fsr`, `fd`, `rswf_min`, `rswf_max`), which `params/` of XTEM has. The fire return interval `FRI` of `lulc.nc` is 2000 years.
 
 ## Sources
 
@@ -131,14 +131,14 @@ For the mixed potential types 8, 14, 27 and 31 the primary and the secondary coh
 `chrtarea` is the area in km2 and `FRI` is 2000. A cohort exists where its area exceeds `--min-area` (0.001 km2). The model counts the cohorts of each cell from the cells where `standage` has data.
 `cohort` lists the cohort names; `potveg`, `currentveg` and `subtype` carry `flag_values` and `flag_meanings` that list the TEM vegetation types by name.
 
-The 15 classes of Ramankutty and Foley map to TEM types (`params/biogeography/tcomm45_lulc.yaml` of TEM_2026) as 1 to 16, 2 to 18, 3 to 33, 4 to 9, 5 to 10,
+The type numbers differ between parameter sets, so the script is written with the numbers of the old `biogeography` set and renumbers every type by its description in the `tcomm45_lulc.yaml` that `--tcomm` names (`XTEM/params/gdstem/tcomm45_lulc.yaml`); a type that the set lacks stops the script. The managed cohorts are mapped to crops (C3 annual crops), pasture and turf lawn by name; their `agstate` values (crops 1, pasture 2, urban 3) and the use of the `nfert` input for fertilizer in place of the old fertilizer flags have not been checked against the seven managed states of GDSTEM and need the model developers. In the numbers of the old set, the 15 classes of Ramankutty and Foley map to TEM types as 1 to 16, 2 to 18, 3 to 33, 4 to 9, 5 to 10,
 6 and 7 to 4, 8 to 8, 9 to 14 (31 poleward of 23.5 degrees), 10 to 13, 11 and 12 to 15, 13 to 3, 14 to 21 and 15 to 2.
 The Hurtt file used TEM's own finer potential vegetation: in 3381 cells of the lower 48 states it agrees with this crosswalk in 44 percent of the cells, so results differ from the old runs where the types differ.
 The savanna rule, the crosswalk and the age of secondary stands are assumptions of the script; the model developers should confirm them before a production run.
 Tillage, disturbance and land-cover change in time are not written, so a run uses `tlulcflag: 0`.
 
 `lulc.nc` has `cohort` as dimension and as int64 coordinate; `lat` and `lon` are float32, categorical fields int64 with `_FillValue -9999`, other fields float32.
-The layouts of all files are in `docs/io_structure.md` of TEM_2026.
+The layouts of all files are in `docs/io_structure.md` of XTEM.
 
 ## References
 

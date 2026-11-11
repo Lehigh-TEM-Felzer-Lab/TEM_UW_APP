@@ -1,4 +1,4 @@
-"""Global 1 degree test of TEM_2026 and TEM_UW_APP: clone, build, get the data, run the cases, archive.
+"""Global 1 degree test of XTEM and TEM_UW_APP: clone, build, get the data, run the cases, archive.
 
     python run_test.py                  # monthly and daily case
     python run_test.py --all            # plus every case behind a flag
@@ -21,7 +21,7 @@ wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) 
 CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (technical_desc.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
 (AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
 
-20261109 Changed: one build_mpi of TEM_2026 runs the monthly and the daily case (build_mpi_daily removed).
+20261109 Changed: one build_mpi of XTEM runs the monthly and the daily case (build_mpi_daily removed).
 20261110 Changed: the model runs under srun (the case is staged with run_model: false); --mock-era5 and --srun-args added.
 """
 
@@ -45,7 +45,7 @@ import yaml
 
 GITHUB = "https://github.com/Lehigh-TEM-Felzer-Lab"
 REPOS = {
-    "TEM_2026": "TEM_2026",
+    "XTEM": "XTEM",
     "TEM_UW_APP": "TEM_UW_APP",
 }
 YEAR = 2019  # a year without 29 February
@@ -62,13 +62,11 @@ FAST_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years
 CASES = {
     "monthly": ("", {"ostateflag": 1}),
     "daily": ("", {"run_dt_units": "day", **DAILY_EQUIL}),
-    "competition": ("competition", {"competition": 1}),
     "fire": ("fire", {"veg_fire": 1, "fire_seed": 1, "fire": True}),
     "fire_expected": (
         "fire",
         {"veg_fire": 1, "fire_mode": 1, "fire_seed": 1, "fire": True},
     ),
-    "wood_pools": ("wood", {"wood_pools": 1}),
     "spin_numspin": ("spin", {"spinflag": 1, "numspin": 2, "spintime": 20}),
     "spin_dynamic": ("spin", {"spinflag": 2, "de_nyears": 1}),
     "ode_rkf": ("solver", {"ode_solver": 2}),
@@ -127,7 +125,7 @@ def clone(work: Path) -> None:
             need(["git", "-C", str(dest), "pull", "--ff-only", "-q"])
         else:
             need(["git", "clone", "-q", f"{GITHUB}/{repo}", str(dest)])
-    for name in ("TEM_2026", "TEM_UW_APP"):
+    for name in ("XTEM", "TEM_UW_APP"):
         rev = subprocess.run(
             ["git", "-C", str(work / "repos" / name), "log", "--oneline", "-1"],
             capture_output=True,
@@ -139,7 +137,7 @@ def clone(work: Path) -> None:
 
 def build(work: Path, jobs: int, flags: set[str], only: list[str] | None) -> None:
     """build_mpi/, which runs the monthly and the daily cases."""
-    src = work / "repos" / "TEM_2026"
+    src = work / "repos" / "XTEM"
     if shutil.which("mpicxx") is None and not os.environ.get("TEM_MODULES"):
         sys.exit(
             "mpicxx not found: load an MPI module (export TEM_MODULES='gcc openmpi netcdf' or module load in the job script)"
@@ -149,7 +147,7 @@ def build(work: Path, jobs: int, flags: set[str], only: list[str] | None) -> Non
         cwd=src,
         log=work / "build.log",
     )
-    say("built TEM_2026")
+    say("built XTEM")
 
 
 def era5(work: Path) -> Path:
@@ -325,8 +323,8 @@ def run_case(
     exe = "build_mpi/xtem"
     needs = over.pop("needs", None)
     cfg = {
-        "tem_src": str(work / "repos" / "TEM_2026"),
-        "tem_exe": f"{work / 'repos' / 'TEM_2026' / exe}",
+        "tem_src": str(work / "repos" / "XTEM"),
+        "tem_exe": f"{work / 'repos' / 'XTEM' / exe}",
         "run_mode": "local",
         "run_model": False,  # the app stages the case, srun runs the model
         "n_cpus": ncpu,

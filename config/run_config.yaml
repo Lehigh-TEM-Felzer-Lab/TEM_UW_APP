@@ -1,6 +1,6 @@
 # =============================================================================
 # TEM_UW_APP Run Configuration
-# Builds the NetCDF inputs and tem_config.yaml of TEM_2026 from your data, then runs the model.
+# Builds the NetCDF inputs and tem_config.yaml of XTEM from your data, then runs the model.
 # =============================================================================
 # The launcher reads the case-local run_config.yaml from the submission directory and fills any
 # unset key from this default file. Unknown keys are rejected at submission time, so keep case
@@ -26,7 +26,7 @@
 # 0. JOB ENVIRONMENT (SYSTEM)
 # -----------------------------------------------------------------------------
 
-tem_src: null # TEM_2026 checkout: templates/tem_config.yaml, params/ and the build (REQUIRED)
+tem_src: null # XTEM checkout: templates/tem_config.yaml, params/ and the build (REQUIRED)
 tem_exe: null # Auto-select build/xtem or build_mpi/xtem from n_cpus
 modules: [] # Modules loaded before the run (the libraries the executable was built with)
 
@@ -90,14 +90,14 @@ regrid_method: box_mean # box_mean (area average, when the source is finer) | bi
 climate_file: null # Climate (REQUIRED), merged by coordinates; units come from the "units" attribute
 netcdf_climate_in_frequency: monthly # hourly | daily | monthly, the time step of climate_file
 static_file: null # elev, sand, silt, clay, ndep (lat, lon); wind, ozone (month, lat, lon)
-lulc_file: null # Land cover, (cohort, lat, lon); the fields of TEM_2026 technical_desc.md
+lulc_file: null # Land cover, (cohort, lat, lon); the fields of XTEM technical_desc.md
 co2_file: null # co2 (time), annual
 lightning_file: null # lightning_flashes, km-2 month-1 (12 months, lat, lon); needed when veg_fire is 1
 population_file: null # population_density, km-2 (lat, lon); needed when veg_fire is 1
-gdp_file: null # gdp, GDP per capita (lat, lon); optional: with it the fire model adds the GDSTEM-FIRE terms (CLM5 surface data or Kummu et al. 2018, doi:10.5061/dryad.dk1j0; docs in TEM_2026 io_structure.md)
+gdp_file: null # gdp, GDP per capita (lat, lon); optional: with it the fire model adds the GDSTEM-FIRE terms (CLM5 surface data or Kummu et al. 2018, doi:10.5061/dryad.dk1j0; docs in XTEM io_structure.md)
 cropfire_file: null # cropfire_month, month of crop burning 1-12 (lat, lon); optional, with gdp_file (month of agricultural burning, CLM5 surface data)
 storm_file: null # NetCDF return-interval grids in years, needed when storm_disturbance is true
-nfert_file: null # nfertcrop and nfertpasture, needed when xnfertflag is positive
+nfert_file: null # nfertcrop and nfertpasture, needed when agfertflag is 1
 surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
 
 # varmap (flat): <model variable>: <name of that variable in your NetCDF dataset>. The model variable is used as it is when
@@ -110,14 +110,14 @@ surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
 varmap: {}
 
 # -----------------------------------------------------------------------------
-# 5. INPUT OPTIONS (keys of TEM_2026 templates/tem_config.yaml, whose comments describe them)
+# 5. INPUT OPTIONS (keys of XTEM templates/tem_config.yaml, whose comments describe them)
 # -----------------------------------------------------------------------------
 
 xtco2flag: 1 # 1: transient CO2 from co2_file | 0: static
 xto3flag: 0 # 1: transient ozone | 0: long-term average
 xtndepflag: 0 # 1: transient N deposition | 0: long-term average
 xtws10flag: 0 # 1: transient wind | 0: long-term average
-xnfertflag: 0 # 0: built-in fertilizer series | 1: annual input without time | 2: transient input
+xnfertflag: 1 # 1: annual input without time (long-term average) | 2: transient input
 tlulcflag: 0 # 1: transient land use
 initco2: 286.596 # ppmv at the start
 xco2level: 286.596 # ppmv of the equilibrium
@@ -168,11 +168,9 @@ dc2n: 0.0 # Relative change of C:N per change in CO2
 ode_solver: 1 # 1 Bogacki-Shampine | 2 Runge-Kutta-Fehlberg
 rsoil_method: 2 # 1 Q10 | 2 SiB
 rhmoist_method: 1 # 1 WFPS | 2 DNDC | 3 sech
-wood_pools: 0 # 0: standing dead only | 1: GDSTEM-FIRE standing dead, CWD and FWD pools
 agtillflag: 0 # Tilling
 agirrgflag: 0 # Irrigation
 agfertflag: 0 # Fertilizer
-competition: 0 # 1: the cohorts of a cell take each step together (TEM_2026 competition key)
 veg_fire: 0 # 1: wildfire; needs lightning_file and population_file; any run_dt. With gdp_file the GDSTEM-FIRE terms are added
 fire_mode: 0 # 0: random draw | 1: expected burn
 fire_topography: 0 # 1: fire 250 times less likely above 2500 m
@@ -200,26 +198,31 @@ ostateyear: 0 # Year of the state written when ostateflag is 2
 # -----------------------------------------------------------------------------
 # One set of params/ per run: biogeography, gdstem, gdstem_fire or glstem.
 
-cmntecd: "{tem_src}/params/biogeography/tcomm45_lulc.yaml" # Vegetation mosaics
-rootzecd: "{tem_src}/params/biogeography/trotz45_lulc.yaml" # Rooting depth
-vegecd: "{tem_src}/params/biogeography/tveg45_lulc.yaml" # Vegetation
-conductecd: "{tem_src}/params/biogeography/tconduct45_lulc.yaml" # Hydraulic conductance
-mcrbecd: "{tem_src}/params/biogeography/tmcrv45_lulc.yaml" # Microbial
-agecd: "{tem_src}/params/biogeography/ag45_lulc.yaml" # Agriculture
+cmntecd: "{tem_src}/params/gdstem/tcomm45_lulc.yaml" # Vegetation mosaics
+rootzecd: "{tem_src}/params/gdstem/trotz45_lulc.yaml" # Rooting depth
+vegecd: "{tem_src}/params/gdstem/tveg45_lulc.yaml" # Vegetation
+conductecd: "{tem_src}/params/gdstem/tconduct45_lulc.yaml" # Hydraulic conductance
+mcrbecd: "{tem_src}/params/gdstem/tmcrv45_lulc.yaml" # Microbial
+agecd: "{tem_src}/params/gdstem/ag45_lulc.yaml" # Agriculture
 # Site calibrations use top-level *_dat keys. Each file declares its TEM community ID.
-ice_dat: "{tem_src}/params/biogeography/ice45_openn_303.yaml"
-tpd_dat: "{tem_src}/params/biogeography/tpd45_openn_303.yaml"
-bnz_dat: "{tem_src}/params/biogeography/bnz45_openn_303.yaml"
-hvc_dat: "{tem_src}/params/biogeography/hvc45_openn_dndc.yaml"
-hvd_dat: "{tem_src}/params/biogeography/hvd45_openn_dndc.yaml"
-knz_ag0_dat: "{tem_src}/params/biogeography/knz45_openn_303_ag0.yaml"
-pwn_dat: "{tem_src}/params/biogeography/pwn45_openn_303.yaml"
-cur_dat: "{tem_src}/params/biogeography/cur45_openn_303.yaml"
-duc_dat: "{tem_src}/params/biogeography/duc45_openn_303.yaml"
-gux_dat: "{tem_src}/params/biogeography/gux45_openn_303.yaml"
-tai_dat: "{tem_src}/params/biogeography/tai45_openn_303.yaml"
-gum_dat: "{tem_src}/params/biogeography/gum45_openn_303.yaml"
-kbm_dat: "{tem_src}/params/biogeography/kbm45_openn_303.yaml"
-turf_dat: "{tem_src}/params/biogeography/turf45_openn_303.yaml"
-knz_ag2_dat: "{tem_src}/params/biogeography/knz45_openn_303_ag2.yaml"
-rodale_ag2_dat: "{tem_src}/params/biogeography/rodale_openn_303_ag2.yaml"
+ice_dat: "{tem_src}/params/gdstem/ice45_openn_303.yaml"
+tpd_dat: "{tem_src}/params/gdstem/tpd45_trendy.yaml"
+tmt_dat: "{tem_src}/params/gdstem/tmt45_trendy.yaml"
+bnz_dat: "{tem_src}/params/gdstem/bnz45_trendy.yaml"
+hvc_dat: "{tem_src}/params/gdstem/hvc45_trendy.yaml"
+hvd_dat: "{tem_src}/params/gdstem/hvd45_trendy.yaml"
+tai_dat: "{tem_src}/params/gdstem/tai45_trendy.yaml"
+pwn_dat: "{tem_src}/params/gdstem/pwn45_trendy.yaml"
+knz_ag0_dat: "{tem_src}/params/gdstem/knz45_ag0_trendy.yaml"
+gum_dat: "{tem_src}/params/gdstem/gum45_trendy.yaml"
+cur_dat: "{tem_src}/params/gdstem/cur45_trendy.yaml"
+gux_dat: "{tem_src}/params/gdstem/gux45_trendy.yaml"
+duc_evergreen_dat: "{tem_src}/params/gdstem/duc45_evergreen_trendy.yaml"
+duc_deciduous_dat: "{tem_src}/params/gdstem/duc45_deciduous_trendy.yaml"
+impervious_dat: "{tem_src}/params/gdstem/impervious_trendy.yaml"
+turf_dat: "{tem_src}/params/gdstem/turf45_trendy.yaml"
+kbs_dat: "{tem_src}/params/gdstem/kbs45_trendy.yaml"
+kbm_dat: "{tem_src}/params/gdstem/kbm45_trendy.yaml"
+osg_dat: "{tem_src}/params/gdstem/osg45_trendy.yaml"
+knz_ag2_dat: "{tem_src}/params/gdstem/knz45_ag2_trendy.yaml"
+pwn_ag2_dat: "{tem_src}/params/gdstem/pwn45_ag2_trendy.yaml"

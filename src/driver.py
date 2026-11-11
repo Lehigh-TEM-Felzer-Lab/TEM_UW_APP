@@ -1,5 +1,5 @@
 # driver.py
-"""Build the TEM_2026 case of the current directory (INPUT/*.nc, tem_config.yaml) and run it.
+"""Build the XTEM case of the current directory (INPUT/*.nc, tem_config.yaml) and run it.
 
 20261109 Changed: the staged climate has exactly the steps of the run (run_length); CO2 covers start_year to
          end_year + 1; the staged fire and population files are flash.nc and popdens.nc.
@@ -214,7 +214,7 @@ DAILY = [d + 0.5 for d in range(365)]
 
 
 def write_config(cfg: dict, present: set[str]) -> None:
-    """tem_config.yaml from the TEM_2026 template: the keys of run_config.yaml that it has, the years and the varmap."""
+    """tem_config.yaml from the XTEM template: the keys of run_config.yaml that it has, the years and the varmap."""
     template = cfg["tem_src"] / "templates" / "tem_config.yaml"
     values = {
         key: value

@@ -206,8 +206,12 @@ def load() -> dict:
         raise ValueError(
             "Grid bounds and horizontal_resolution must define a nonempty grid"
         )
-    if cfg["xnfertflag"] and not cfg["nfert_file"]:
-        raise ValueError("xnfertflag needs nfert_file")
+    if cfg["xnfertflag"] not in (1, 2):
+        raise ValueError(
+            "xnfertflag must be 1 (long-term average) or 2 (transient): fertilizer is read from input data"
+        )
+    if cfg["agfertflag"] == 1 and not cfg["nfert_file"]:
+        raise ValueError("agfertflag 1 needs nfert_file")
     if cfg["xtco2flag"] and not cfg["co2_file"]:
         raise ValueError("xtco2flag needs co2_file")
     if (
