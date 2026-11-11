@@ -21,8 +21,8 @@ wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) 
 CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (technical_desc.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
 (AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
 
-20261109 Changed: one build_mpi of XTEM runs the monthly and the daily case (build_mpi_daily removed).
-20261110 Changed: the model runs under srun (the case is staged with run_model: false); --mock-era5 and --srun-args added.
+20241109 Changed: one build_mpi of XTEM runs the monthly and the daily case (build_mpi_daily removed).
+20241110 Changed: the model runs under srun (the case is staged with run_model: false); --mock-era5 and --srun-args added.
 """
 
 import argparse

@@ -1,7 +1,7 @@
 # time_units.py
 """Times in seconds, as XTEM converts them (tem_core/tem_time.h): units, run length and the model step.
 
-20261110 Created: run_dt and run_length in any unit (second, minute, hour, day, week, month, year) are converted
+20241110 Created: run_dt and run_length in any unit (second, minute, hour, day, week, month, year) are converted
          to seconds on the 365-day noleap year; the app stages monthly or daily forcing, so it accepts a step of
          one calendar month or one day written in any unit (1 day, 24 hours, 86400 seconds).
 """

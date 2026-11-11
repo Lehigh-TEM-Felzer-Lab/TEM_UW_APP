@@ -1,7 +1,7 @@
 # tem_climate.py
 """Read the input NetCDF file(s) and convert its variables to TEM inputs (monthly or daily) on the model grid.
 
-20261109 Fixed: noleap and 360_day daily or hourly forcing is mapped to the standard calendar before 29
+20241109 Fixed: noleap and 360_day daily or hourly forcing is mapped to the standard calendar before 29
          February is dropped; monthly precipitation rates are scaled by the days of the month.
 """
 

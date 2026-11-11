@@ -1,12 +1,12 @@
 # tem_config.py
 """Load and validate the run configuration: config/run_config.yaml overlaid with ./run_config.yaml.
 
-20261109 Changed: run_length and run_length_units replace end_year (end_year is derived); varmap values are
+20241109 Changed: run_length and run_length_units replace end_year (end_year is derived); varmap values are
          one variable name; sand, silt, clay, storm and hurricane are varmap keys; tem_exe defaults to build or
          build_mpi of tem_src (one executable runs monthly and daily steps).
-20261109 Updated: validation of grid, CO2, nitrogen, spin-up and run_dt keys; output variable lists must be
+20241109 Updated: validation of grid, CO2, nitrogen, spin-up and run_dt keys; output variable lists must be
          YAML sequences of names.
-20261111 Changed: fire is the GDSTEM-FIRE model and needs gdp_file (varmap key gdp); cropfire_file and the fire_seed, fire_mode, fire_topography and fire_prescribed_end keys are gone. Earlier: gdp_file switched on the GDSTEM-FIRE terms of the fire
+20241111 Changed: fire is the GDSTEM-FIRE model and needs gdp_file (varmap key gdp); cropfire_file and the fire_seed, fire_mode, fire_topography and fire_prescribed_end keys are gone. Earlier: gdp_file switched on the GDSTEM-FIRE terms of the fire
          model; run_dt and run_length are converted to seconds (time_units.py) and may be written in any unit.
 """
 

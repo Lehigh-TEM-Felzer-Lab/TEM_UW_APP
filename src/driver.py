@@ -1,11 +1,11 @@
 # driver.py
 """Build the XTEM case of the current directory (INPUT/*.nc, tem_config.yaml) and run it.
 
-20261109 Changed: the staged climate has exactly the steps of the run (run_length); CO2 covers start_year to
+20241109 Changed: the staged climate has exactly the steps of the run (run_length); CO2 covers start_year to
          end_year + 1; the staged fire and population files are flash.nc and popdens.nc.
-20261109 Fixed: the time axis of daily and monthly forcing is checked step by step; the rank pieces of an
+20241109 Fixed: the time axis of daily and monthly forcing is checked step by step; the rank pieces of an
          interrupted run are removed.
-20261111 Changed: gdp_file is staged as gdp.nc and cropfire_file is gone (GDSTEM-FIRE).
+20241111 Changed: gdp_file is staged as gdp.nc and cropfire_file is gone (GDSTEM-FIRE).
 """
 
 import logging
