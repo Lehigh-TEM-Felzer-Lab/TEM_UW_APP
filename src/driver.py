@@ -5,7 +5,7 @@
          end_year + 1; the staged fire and population files are flash.nc and popdens.nc.
 20261109 Fixed: the time axis of daily and monthly forcing is checked step by step; the rank pieces of an
          interrupted run are removed.
-20261110 Changed: the optional gdp_file and cropfire_file (GDSTEM-FIRE terms of the fire model) are staged as gdp.nc and crop.nc.
+20261111 Changed: gdp_file is staged as gdp.nc and cropfire_file is gone (GDSTEM-FIRE).
 """
 
 import logging
@@ -252,7 +252,6 @@ def write_config(cfg: dict, present: set[str]) -> None:
         lightning_file="./INPUT/flash.nc",
         population_file="./INPUT/popdens.nc",
         gdp_file="./INPUT/gdp.nc" if cfg["gdp_file"] else None,
-        cropfire_file="./INPUT/crop.nc" if cfg["cropfire_file"] else None,
         storm_file="./INPUT/storm.nc",
         nfert_file="./INPUT/nfert.nc",
     )
@@ -288,7 +287,6 @@ def build(cfg: dict) -> None:
         ("lightning_file", "flash.nc"),
         ("population_file", "popdens.nc"),
         ("gdp_file", "gdp.nc"),
-        ("cropfire_file", "crop.nc"),
         ("nfert_file", "nfert.nc"),
     ):
         if cfg[key]:

@@ -81,8 +81,7 @@ lulc_file: null # Land cover, (cohort, lat, lon); the fields of XTEM technical_d
 co2_file: null # co2 (time), annual
 lightning_file: null # lightning_flashes, km-2 month-1 (12 months, lat, lon); needed when veg_fire is 1
 population_file: null # population_density, km-2 (lat, lon); needed when veg_fire is 1
-gdp_file: null # gdp, GDP per capita (lat, lon); optional: with it the fire model adds the GDSTEM-FIRE terms (CLM5 surface data or Kummu et al. 2018, doi:10.5061/dryad.dk1j0; docs in XTEM io_structure.md)
-cropfire_file: null # cropfire_month, month of crop burning 1-12 (lat, lon); optional, with gdp_file (month of agricultural burning, CLM5 surface data)
+gdp_file: null # gdp, GDP per capita (lat, lon); needed when veg_fire is 1 (CLM5 surface data or Kummu et al. 2018, doi:10.5061/dryad.dk1j0; docs in XTEM io_structure.md)
 storm_file: null # NetCDF return-interval grids in years, needed when storm_disturbance is true
 nfert_file: null # nfertcrop and nfertpasture, needed when agfertflag is 1
 surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
@@ -163,10 +162,6 @@ agtillflag: 0 # Tilling
 agirrgflag: 0 # Irrigation
 agfertflag: 0 # Fertilizer
 veg_fire: 0 # 1: wildfire; needs lightning_file and population_file; any run_dt. With gdp_file the GDSTEM-FIRE terms are added
-fire_mode: 0 # 0: random draw | 1: expected burn
-fire_topography: 0 # 1: fire 250 times less likely above 2500 m
-fire_seed: 0 # Fixes the random sequence (0: not fixed)
-fire_prescribed_end: 2014 # Last year in which the vegetation return interval applies
 storm_disturbance: false # Enable transient storm and hurricane damage. Needs a STORM=1 build.
 
 ```

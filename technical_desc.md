@@ -15,7 +15,7 @@ python src/gen_static_inputs.py $A all --tcomm XTEM/params/gdstem/tcomm45_lulc.y
 ```
 
 `all` writes `elev.nc`, `soil.nc`, `wind.nc`, `ozone.nc`, `ndep.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc`; the ozone and lightning steps are skipped with a message if their login is missing
-(`CEDA_TOKEN`, `EARTHDATA_TOKEN`, see below), and the optional `gdp` and `cropfire` steps if no `--file` is given (see Fire inputs). Each step can also be run alone (`soil`, `elev`, `wind`, `ndep --start 2005 --end 2014`, `ozone`, `lightning`, `population`, `gdp`, `cropfire`, `static`, `lulc`).
+(`CEDA_TOKEN`, `EARTHDATA_TOKEN`, see below), and the `gdp` step if no `--file` is given (see Fire inputs). Each step can also be run alone (`soil`, `elev`, `wind`, `ndep --start 2005 --end 2014`, `ozone`, `lightning`, `population`, `gdp`, `static`, `lulc`).
 `--cohorts` keeps only the listed cohorts (`primary`, `secondary`, `crops`, `pasture`, `urban`; the cohort dimension of `lulc.nc` follows the order given here) and `--min-area` drops cohorts smaller than that area in a cell (km2).
 LUH2 (6 GB) is downloaded unless `--luh2` and `--luh2-static` point to local copies.
 
@@ -51,16 +51,14 @@ All files of a run must be on the same grid (the same `lon` and `lat` values, so
 
 ## Fire inputs
 
-`lightning` and `population` write `flash.nc` and `popdens.nc` (sources in the table below). The two optional files switch on the GDSTEM-FIRE terms (fuel load from the carbon pools, GDP and population suppression, crop fire) and are made from files you download, because the sources need a manual download:
+`lightning` and `population` write `flash.nc` and `popdens.nc` (sources in the table below). The GDSTEM-FIRE model needs `flash.nc`, `popdens.nc` and `gdp.nc` when `veg_fire` is 1. `gdp.nc` is made from a file you download, because the source needs a manual download:
 
 ```bash
 # GDP per person, Kummu et al. (2018), https://doi.org/10.5061/dryad.dk1j0 (2011 international dollars; --scale 0.001 gives thousand dollars)
 python src/gen_static_inputs.py $A gdp --file downloads/GDP_per_capita_PPP_1990_2015_v2.nc --var GDP_per_capita_PPP --scale 0.001
-# month of crop burning, abm_lf of a CLM5 surface dataset (CESM inputdata server), 1 to 12, 0 for none
-python src/gen_static_inputs.py $A cropfire --file downloads/surfdata_clm5.nc --var abm_lf
 ```
 
-`gdp.nc` has `gdp` (thousand US dollars per person, `lat`, `lon`) and `crop.nc` has `cropfire_month`; set `gdp_file` and `cropfire_file` in `run_config.yaml`. The file and variable names above are those I expect for these datasets and were not checked against the downloads: list the variables of your file (`ncdump -h`) and pass the right `--var`. The commands were tested only on synthetic files with the same layout. The model also needs per-community fire parameters in the vegetation YAML (`fsr`, `fd`, `rswf_min`, `rswf_max`), which `params/` of XTEM has. The fire return interval `FRI` of `lulc.nc` is 2000 years.
+`gdp.nc` has `gdp` (thousand US dollars per person, `lat`, `lon`); set `gdp_file` in `run_config.yaml`. The file and variable names above are those I expect for these datasets and were not checked against the downloads: list the variables of your file (`ncdump -h`) and pass the right `--var`. The commands were tested only on synthetic files with the same layout. The model also needs per-community fire parameters in the vegetation YAML (`fsr`, `fd`, `rswf_min`, `rswf_max`), which `params/` of XTEM has. The fire return interval `FRI` of `lulc.nc` is 2000 years.
 
 ## Sources
 
@@ -69,8 +67,7 @@ python src/gen_static_inputs.py $A cropfire --file downloads/surfdata_clm5.nc --
 | `co2.nc` | `co2` (ppmv) | NOAA GML Mauna Loa annual mean; SSP scenarios for later years (Meinshausen et al. 2020) |
 | `flash.nc` | `lightning_flashes` (km-2 month-1) | LIS/OTD 0.5 degree monthly climatology HRMC v2.3.2015 (Cecil et al. 2014), flash rate per day times the days of the month; needs an Earthdata Login |
 | `popdens.nc` | `population_density` (km-2) | WorldPop 2020 persons per 1 km pixel (WorldPop 2018), summed in each cell and divided by the cell area |
-| `gdp.nc` | `gdp` (thousand US$ per person) | optional; Kummu et al. (2018), or `gdp_lf` of the CLM5 surface dataset (Lawrence et al. 2019); from a file you download |
-| `crop.nc` | `cropfire_month` (1 to 12) | optional; `abm_lf` of the CLM5 surface dataset (Lawrence et al. 2019); from a file you download |
+| `gdp.nc` | `gdp` (thousand US$ per person) | needed with `veg_fire`; Kummu et al. (2018), or `gdp_lf` of the CLM5 surface dataset (Lawrence et al. 2019); from a file you download |
 | `static.nc` | `elev` (m) | ETOPO 2022, 60 arc-second ice surface (NOAA NCEI 2022) |
 | | `sand`, `silt`, `clay` (percent) | SoilGrids 2.0 at 5 km (Poggio et al. 2021), layers 0-5, 5-15 and 15-30 cm weighted by thickness, g kg-1 divided by 10 |
 | | `wind` (m s-1, by month) | WorldClim 2.1 mean wind 1970-2000 (Fick and Hijmans 2017); the height is 2 m, not 10 m |

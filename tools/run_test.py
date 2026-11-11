@@ -62,11 +62,7 @@ FAST_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years
 CASES = {
     "monthly": ("", {"ostateflag": 1}),
     "daily": ("", {"run_dt_units": "day", **DAILY_EQUIL}),
-    "fire": ("fire", {"veg_fire": 1, "fire_seed": 1, "fire": True}),
-    "fire_expected": (
-        "fire",
-        {"veg_fire": 1, "fire_mode": 1, "fire_seed": 1, "fire": True},
-    ),
+    "fire": ("fire", {"veg_fire": 1, "fire": True}),
     "spin_numspin": ("spin", {"spinflag": 1, "numspin": 2, "spintime": 20}),
     "spin_dynamic": ("spin", {"spinflag": 2, "de_nyears": 1}),
     "ode_rkf": ("solver", {"ode_solver": 2}),

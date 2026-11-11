@@ -676,26 +676,6 @@ def gdp(a: argparse.Namespace) -> None:
     climatology(a, a.file, a.var, a.scale, "gdp", "thousand US$ per person", False)
 
 
-def cropfire(a: argparse.Namespace) -> None:
-    """Month of crop burning (1 to 12, 0 for none) from a NetCDF given by --file and --var: the median of the source cells in each target cell, rounded."""
-    if not a.file or not a.var:
-        raise SystemExit("cropfire: pass --file and --var (technical_desc.md)")
-    ds = xr.open_dataset(a.file)
-    da = ds[a.var].rename(
-        {k: v for k, v in (("longitude", "lon"), ("latitude", "lat")) if k in ds[a.var].dims}
-    )
-    if "time" in da.dims:
-        da = da.isel(time=0)
-    da = da.assign_coords(lon=((da.lon + 180) % 360) - 180).sortby("lon").sortby("lat")
-    lon, lat = target(a)
-    month = box_mean(da, lon, lat, a.res, how="median").round().fillna(0.0)
-    write(
-        month.rename("cropfire_month").assign_attrs(units="month").to_dataset(),
-        a,
-        "crop.nc",
-    )
-
-
 def static(a: argparse.Namespace) -> None:
     """static.nc from the pieces written before: elev, soil, wind, ozone and ndep."""
     parts = [
@@ -709,9 +689,9 @@ def static(a: argparse.Namespace) -> None:
 
 
 def everything(a: argparse.Namespace) -> None:
-    """Every static input: elev, soil, wind, ozone, ndep, static, lulc, flash and popdens; gdp and cropfire need their own --file (skipped without it), as ozone and lightning without their login."""
+    """Every static input: elev, soil, wind, ozone, ndep, static, lulc, flash and popdens; gdp needs their own --file (skipped without it), as ozone and lightning without their login."""
     a.file, a.var, a.scale, a.start, a.end = None, None, 1.0, 2005, 2014
-    for f in (elev, soil, wind, ozone, ndep, static, lulc, lightning, population, gdp, cropfire):
+    for f in (elev, soil, wind, ozone, ndep, static, lulc, lightning, population, gdp):
         try:
             f(a)
         except SystemExit as e:
@@ -753,7 +733,7 @@ def main() -> None:
         c.add_argument("--file", help="a file you downloaded instead of the default")
         c.add_argument("--var")
         c.set_defaults(f=f)
-    for name, f in (("ozone", ozone), ("ndep", ndep), ("gdp", gdp), ("cropfire", cropfire)):
+    for name, f in (("ozone", ozone), ("ndep", ndep), ("gdp", gdp)):
         c = sub.add_parser(name)
         c.add_argument(
             "--file",

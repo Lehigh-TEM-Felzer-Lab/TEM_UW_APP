@@ -6,7 +6,7 @@
          build_mpi of tem_src (one executable runs monthly and daily steps).
 20261109 Updated: validation of grid, CO2, nitrogen, spin-up and run_dt keys; output variable lists must be
          YAML sequences of names.
-20261110 Changed: gdp_file and cropfire_file (varmap keys gdp, cropfire_month) switch on the GDSTEM-FIRE terms of the fire
+20261111 Changed: fire is the GDSTEM-FIRE model and needs gdp_file (varmap key gdp); cropfire_file and the fire_seed, fire_mode, fire_topography and fire_prescribed_end keys are gone. Earlier: gdp_file switched on the GDSTEM-FIRE terms of the fire
          model; run_dt and run_length are converted to seconds (time_units.py) and may be written in any unit.
 """
 
@@ -50,7 +50,6 @@ MODEL_KEYS = {
     "lightning",
     "popdens",
     "gdp",
-    "cropfire_month",
     "storm",
     "hurricane",
     "nfertcrop",
@@ -94,7 +93,6 @@ APP_KEYS = {
     "lightning_file",
     "population_file",
     "gdp_file",
-    "cropfire_file",
     "storm_file",
     "nfert_file",
     "surface_pressure_hpa",
@@ -110,7 +108,6 @@ INPUT_KEYS = [
     "lightning_file",
     "population_file",
     "gdp_file",
-    "cropfire_file",
     "storm_file",
     "nfert_file",
 ]
@@ -226,8 +223,8 @@ def load() -> dict:
         raise ValueError("storm_disturbance must be true or false")
     if storm and not cfg["storm_file"]:
         raise ValueError("storm_disturbance needs storm_file")
-    if cfg["veg_fire"] and not (cfg["lightning_file"] and cfg["population_file"]):
-        raise ValueError("veg_fire needs lightning_file and population_file")
+    if cfg["veg_fire"] and not (cfg["lightning_file"] and cfg["population_file"] and cfg["gdp_file"]):
+        raise ValueError("veg_fire needs lightning_file, population_file and gdp_file")
     if cfg["netcdf_climate_in_frequency"] not in ("hourly", "daily", "monthly"):
         raise ValueError("netcdf_climate_in_frequency must be hourly, daily or monthly")
     if cfg["step"] == "day" and cfg["netcdf_climate_in_frequency"] != "daily":

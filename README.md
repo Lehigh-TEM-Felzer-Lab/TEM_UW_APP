@@ -53,7 +53,7 @@ logs/
 | `climate_file`, `netcdf_climate_in_frequency` | climate files (path, glob or list) and their time step (hourly, daily, monthly) |
 | `static_file`, `lulc_file`, `co2_file` | static, land-cover and CO2 files in the layout of XTEM `technical_desc.md` |
 | `lightning_file`, `population_file` | lightning flashes and population density, needed when `veg_fire: 1` |
-| `gdp_file`, `cropfire_file` | optional: with `gdp_file` (`gdp`) the fire model adds the GDSTEM-FIRE terms (the vegetation file needs `fsr`, `fd`, `rswf_min`, `rswf_max`); `cropfire_file` (`cropfire_month`) is optional; staged as `gdp.nc` and `crop.nc` |
+| `gdp_file` | needed when `veg_fire` is 1 (`gdp`); the vegetation file needs `igef`, `fsr` and `fd`; staged as `gdp.nc` |
 | `storm_file`, `nfert_file` | storm return intervals (`storm_disturbance: true`) and N fertilizer (`xnfertflag`), layout in XTEM `technical_desc.md` |
 | `varmap` | `<model variable>: <name of that variable in your NetCDF dataset>`; the default name is read first, the map only when the dataset names the variable differently |
 | `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
