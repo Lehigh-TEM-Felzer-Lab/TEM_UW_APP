@@ -100,8 +100,8 @@ storm_file: null # NetCDF return-interval grids in years, needed when storm_dist
 nfert_file: null # nfertcrop and nfertpasture, needed when xnfertflag is positive
 surface_pressure_hpa: 1013.25 # Used for vpr from huss when ps is not in varmap
 
-# varmap (flat): <model variable>: <variable in your files>. The model variable is used as it is when
-# a file has a variable of that name; list the others here. Keys:
+# varmap (flat): <model variable>: <name of that variable in your NetCDF dataset>. The model variable is used as it is when
+# the dataset has a variable of that name; list the others here. Keys:
 #   climate (REQUIRED, derived to TEM units):  tair or tmin + tmax;  dtr or tmin + tmax;  prec;  nirr;
 #       vpr or dewpoint or huss (+ ps)
 #   optional from the climate files:  wind or u10 + v10;  elev

@@ -55,7 +55,7 @@ logs/
 | `lightning_file`, `population_file` | lightning flashes and population density, needed when `veg_fire: 1` |
 | `gdp_file`, `cropfire_file` | optional: with `gdp_file` (`gdp`) the fire model adds the GDSTEM-FIRE terms (the vegetation file needs `fsr`, `fd`, `rswf_min`, `rswf_max`); `cropfire_file` (`cropfire_month`) is optional; staged as `gdp.nc` and `crop.nc` |
 | `storm_file`, `nfert_file` | storm return intervals (`storm_disturbance: true`) and N fertilizer (`xnfertflag`), layout in TEM_2026 `technical_desc.md` |
-| `varmap` | `<model variable>: <variable in your files>`; the default variable name is read first, the map only when the file lacks it |
+| `varmap` | `<model variable>: <name of that variable in your NetCDF dataset>`; the default name is read first, the map only when the dataset names the variable differently |
 | `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
 | `start_year`, `run_length`, `run_length_units` | first year and duration in any unit (seconds to years, converted to seconds) from 1 January; the app stages climate with exactly that many steps |
 | `spinflag`, `veg_fire`, `xnfertflag`, ... | the options of `tem_config.yaml`, one key each |
