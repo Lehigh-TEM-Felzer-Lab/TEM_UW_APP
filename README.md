@@ -3,7 +3,7 @@
 Prepares and runs a case of [TEM_2026](https://github.com/Lehigh-TEM-Felzer-Lab/TEM_2026). The app regrids gridded NetCDF data to the model grid,
 writes the NetCDF inputs and `tem_config.yaml` of the model, and runs or submits `xtem`. It also builds NetCDF inputs from public climate and land datasets.
 
-# What files are what
+# Contents
 
 | Path | Content |
 |---|---|
@@ -30,7 +30,7 @@ TEM_2026 needs g++ 9 or later, make, libyaml and libnetcdf (C). The serial build
 
 # Running a case
 
-The call hierarchy of the model is in the [flowchart of TEM_2026](https://github.com/Lehigh-TEM-Felzer-Lab/TEM_2026/blob/main/flowchart.md).
+The call hierarchy of the app is in [flowchart.md](flowchart.md) and that of the model in the [flowchart of TEM_2026](https://github.com/Lehigh-TEM-Felzer-Lab/TEM_2026/blob/main/flowchart.md).
 
 1. Copy `examples/west/run_config.yaml` to an empty directory.
 2. Set `tem_src` (the TEM_2026 checkout), the climate files, the box and the years. For `n_cpus` above 1 build `make mpi`; set `competition: 1` for cohorts that take each step together.
@@ -49,13 +49,13 @@ logs/
 
 | Key | Description |
 |---|---|
-| `tem_src`, `tem_exe` | TEM_2026 checkout and executable (default chosen from `n_cpus` and `run_dt_units`, see Compile-time options) |
+| `tem_src`, `tem_exe` | TEM_2026 checkout and executable (default chosen from `n_cpus`, see Compile-time options) |
 | `climate_file`, `netcdf_climate_in_frequency` | climate files (path, glob or list) and their time step (hourly, daily, monthly) |
 | `static_file`, `lulc_file`, `co2_file` | static, land-cover and CO2 files in the layout of TEM_2026 `technical_desc.md` |
 | `lightning_file`, `population_file` | lightning flashes and population density, needed when `veg_fire: 1` |
 | `gdp_file`, `cropfire_file` | optional: with `gdp_file` (`gdp`) the fire model adds the GDSTEM-FIRE terms (the vegetation file needs `fsr`, `fd`, `rswf_min`, `rswf_max`); `cropfire_file` (`cropfire_month`) is optional; staged as `gdp.nc` and `crop.nc` |
 | `storm_file`, `nfert_file` | storm return intervals (`storm_disturbance: true`) and N fertilizer (`xnfertflag`), layout in TEM_2026 `technical_desc.md` |
-| `varmap` | `<model variable>: <variable in your files>`; the model name is used first, the map only when the file lacks it |
+| `varmap` | `<model variable>: <variable in your files>`; the default variable name is read first, the map only when the file lacks it |
 | `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
 | `start_year`, `run_length`, `run_length_units` | first year and duration in any unit (seconds to years, converted to seconds) from 1 January; the app stages climate with exactly that many steps |
 | `spinflag`, `veg_fire`, `xnfertflag`, ... | the options of `tem_config.yaml`, one key each |
@@ -87,7 +87,7 @@ These are options of the TEM_2026 build, not of this app. Pass them to `make` in
 | `CXXFLAGS` | `-O2` | an unoptimised build gives different numbers |
 | `CXX` | `g++` | compiler; `make mpi` uses `mpicxx` |
 
-Every build makes one executable, `xtem`, which runs monthly and daily steps (`run_dt`, `run_dt_units`, converted to seconds) and cohorts in turn or together (`competition`). Without `tem_exe` the app picks `build/xtem`, or `build_mpi/xtem` when `n_cpus` is above 1.
+`xtem` is the only executable; it runs monthly and daily steps (`run_dt`, converted to seconds) and cohorts in turn or together (`competition`). Without `tem_exe` the app picks `build/xtem`, or `build_mpi/xtem` when `n_cpus` is above 1.
 
 # Input data
 
@@ -102,8 +102,7 @@ python src/gen_static_inputs.py $A all --year 2015 --cohorts primary secondary c
 
 `gen_climate_inputs.py` writes `climate_<source>.nc` and `varmap_<source>.yaml` (copy it into `run_config.yaml`; set `netcdf_climate_in_frequency: daily`). `all` builds `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc` (and the files they are made from); `--cohorts` and `--min-area` select the cohorts of `lulc.nc`.
 Ozone needs a CEDA token (`CEDA_TOKEN`) and lightning an Earthdata Login token (`EARTHDATA_TOKEN`); all other files are downloaded by the script. Sources, download links,
-units and the land-cover assumptions are in [technical_desc.md](technical_desc.md). Set the `netcdf_*_in_file` keys of
-`run_config.yaml` to your datasets. NetCDF inputs may use any filename extension.
+units and the land-cover assumptions are in [technical_desc.md](technical_desc.md). Point `climate_file`, `static_file` and the other file keys of `run_config.yaml` to your datasets; NetCDF inputs may use any filename extension.
 
 # Test
 
