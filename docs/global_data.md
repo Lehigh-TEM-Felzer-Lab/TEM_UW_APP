@@ -11,7 +11,7 @@ python src/gen_static_inputs.py $A all --year 2015 --cohorts primary secondary c
 ```
 
 `all` writes `elev.nc`, `soil.nc`, `wind.nc`, `ozone.nc`, `ndep.nc`, `static.nc`, `lulc.nc`, `flash.nc` and `popdens.nc`; the ozone and lightning steps are skipped with a message if their login is missing
-(`CEDA_TOKEN`, `EARTHDATA_TOKEN`, see below). Each step can also be run alone (`soil`, `elev`, `wind`, `ndep --start 2005 --end 2014`, `ozone`, `lightning`, `population`, `static`, `lulc`).
+(`CEDA_TOKEN`, `EARTHDATA_TOKEN`, see below), and the optional `gdp` and `cropfire` steps if no `--file` is given (see Fire inputs). Each step can also be run alone (`soil`, `elev`, `wind`, `ndep --start 2005 --end 2014`, `ozone`, `lightning`, `population`, `gdp`, `cropfire`, `static`, `lulc`).
 `--cohorts` keeps only the listed cohorts (`primary`, `secondary`, `crops`, `pasture`, `urban`; the cohort dimension of `lulc.nc` follows the order given here) and `--min-area` drops cohorts smaller than that area in a cell (km2).
 LUH2 (6 GB) is downloaded unless `--luh2` and `--luh2-static` point to local copies.
 
@@ -41,6 +41,23 @@ Set `climate_file` and `netcdf_climate_in_frequency: daily` and paste the varmap
 The gridMET, MACA and CMIP6 downloads were tested on a 2 x 2 degree box for 2013 and 2014 and the app converted their units. The ERA5 request needs a CDS account and was not run here.
 The files for nitrogen fertilizer and for yearly land-cover change are not generated.
 
+## What the model needs from the files
+
+All files of a run must be on the same grid (the same `lon` and `lat` values, so the same resolution) and every file with a time axis must start in `clmstartyr`, be regular at the model step, a month or a year, and cover the run; `time` carries CF units (`days since ...`, `noleap`, `365_day` or `standard` calendar). TEM_2026 checks this at load and stops with the file and the values that differ (`tem_core/tem_input_check.cpp`), so use one `--bbox` and one `--res` for every step. A cell runs where `lulc.nc` has a cohort and, if a `mask` is mapped in `varmap`, where the mask is above 0; every other input must have data there. The fire files below are needed only with `veg_fire: 1`, and `gdp.nc` and `crop.nc` only for the GDSTEM-FIRE terms.
+
+## Fire inputs
+
+`lightning` and `population` write `flash.nc` and `popdens.nc` (sources in the table below). The two optional files switch on the GDSTEM-FIRE terms (fuel load from the carbon pools, GDP and population suppression, crop fire) and are made from files you download, because the sources need a manual download:
+
+```bash
+# GDP per person, Kummu et al. (2018), https://doi.org/10.5061/dryad.dk1j0 (2011 international dollars; --scale 0.001 gives thousand dollars)
+python src/gen_static_inputs.py $A gdp --file downloads/GDP_per_capita_PPP_1990_2015_v2.nc --var GDP_per_capita_PPP --scale 0.001
+# month of crop burning, abm_lf of a CLM5 surface dataset (CESM inputdata server), 1 to 12, 0 for none
+python src/gen_static_inputs.py $A cropfire --file downloads/surfdata_clm5.nc --var abm_lf
+```
+
+`gdp.nc` has `gdp` (thousand US dollars per person, `lat`, `lon`) and `crop.nc` has `cropfire_month`; set `gdp_file` and `cropfire_file` in `run_config.yaml`. The file and variable names above are those I expect for these datasets and were not checked against the downloads: list the variables of your file (`ncdump -h`) and pass the right `--var`. The commands were tested only on synthetic files with the same layout. The model also needs per-community fire parameters in the vegetation YAML (`fsr`, `fd`, `rswf_min`, `rswf_max`), which `params/` of TEM_2026 has. The fire return interval `FRI` of `lulc.nc` is 2000 years.
+
 ## Sources
 
 | File | Variable (unit) | Source |
@@ -48,6 +65,8 @@ The files for nitrogen fertilizer and for yearly land-cover change are not gener
 | `co2.nc` | `co2` (ppmv) | NOAA GML Mauna Loa annual mean; SSP scenarios for later years (Meinshausen et al. 2020) |
 | `flash.nc` | `lightning_flashes` (km-2 month-1) | LIS/OTD 0.5 degree monthly climatology HRMC v2.3.2015 (Cecil et al. 2014), flash rate per day times the days of the month; needs an Earthdata Login |
 | `popdens.nc` | `population_density` (km-2) | WorldPop 2020 persons per 1 km pixel (WorldPop 2018), summed in each cell and divided by the cell area |
+| `gdp.nc` | `gdp` (thousand US$ per person) | optional; Kummu et al. (2018), or `gdp_lf` of the CLM5 surface dataset (Lawrence et al. 2019); from a file you download |
+| `crop.nc` | `cropfire_month` (1 to 12) | optional; `abm_lf` of the CLM5 surface dataset (Lawrence et al. 2019); from a file you download |
 | `static.nc` | `elev` (m) | ETOPO 2022, 60 arc-second ice surface (NOAA NCEI 2022) |
 | | `sand`, `silt`, `clay` (percent) | SoilGrids 2.0 at 5 km (Poggio et al. 2021), layers 0-5, 5-15 and 15-30 cm weighted by thickness, g kg-1 divided by 10 |
 | | `wind` (m s-1, by month) | WorldClim 2.1 mean wind 1970-2000 (Fick and Hijmans 2017); the height is 2 m, not 10 m |
@@ -128,6 +147,8 @@ The layouts of all files are in `docs/io_structure.md` of TEM_2026.
 - Hersbach, H. et al. (2020) Q. J. R. Meteorol. Soc. 146, 1999-2049. https://doi.org/10.1002/qj.3803
 - Hurtt, G. C. et al. (2020) Geosci. Model Dev. 13, 5425-5464. https://doi.org/10.5194/gmd-13-5425-2020
 - Lamarque, J.-F. et al. (2013) Atmos. Chem. Phys. 13, 7997-8018. https://doi.org/10.5194/acp-13-7997-2013
+- Kummu, M., Taka, M. and Guillaume, J. H. A. (2018) Sci. Data 5, 180004. https://doi.org/10.1038/sdata.2018.4
+- Lawrence, D. M. et al. (2019) J. Adv. Model. Earth Syst. 11, 4245-4287. https://doi.org/10.1029/2018MS001583
 - Meinshausen, M. et al. (2020) Geosci. Model Dev. 13, 3571-3605. https://doi.org/10.5194/gmd-13-3571-2020
 - NOAA NCEI (2022) ETOPO 2022 15 Arc-Second Global Relief Model. https://doi.org/10.25921/fd45-gt74
 - Poggio, L. et al. (2021) SOIL 7, 217-240. https://doi.org/10.5194/soil-7-217-2021

@@ -15,7 +15,6 @@ writes the NetCDF inputs and `tem_config.yaml` of the model, and runs or submits
 | `launchers/` | local and SLURM launchers |
 | `examples/west/` | western United States example |
 | `docs/` | `global_data.md` (sources of the input data) |
-| `tools/make_docs.py` | builds the two PDFs |
 
 # Setup
 
@@ -115,10 +114,9 @@ units and the land-cover assumptions are in [docs/global_data.md](docs/global_da
 | File | Content |
 | --- | --- |
 | [TEM_UW_APP-Technical-Description.pdf](TEM_UW_APP-Technical-Description.pdf) | build options, workflow and input sources |
-| [run_config_Nov2026.pdf](run_config_Nov2026.pdf) | `run_config.yaml` key reference |
+| [run_config.pdf](run_config.pdf) | `run_config.yaml` key reference |
 
 The [run configuration](config/run_config.yaml) lists keys, defaults, and meanings.
-`python tools/make_docs.py` builds PDF copies of the configuration reference and technical description (needs Pandoc and XeLaTeX).
 
 # Limits
 
