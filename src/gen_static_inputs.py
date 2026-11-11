@@ -2,7 +2,7 @@
 
 Each subcommand writes one file of INPUT/ on the grid given by --bbox LON_MIN LON_MAX LAT_MIN LAT_MAX (default: the globe) and --res
 (cell centres on multiples of res from the minimum). The subcommand all writes every static input including lulc.nc.
-See docs/global_data.md of TEM_UW_APP for the sources, units and caveats.
+See technical_desc.md of TEM_UW_APP for the sources, units and caveats.
 
     python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 --res 0.5 all --cohorts primary secondary crops
     python src/gen_static_inputs.py --out INPUT --bbox -125 -110 32 49 co2 --start 2015 --end 2100
@@ -45,7 +45,7 @@ LAYERS = {
     "5-15cm": 10,
     "15-30cm": 15,
 }  # SoilGrids layers of the top 30 cm and their thickness [cm]
-# Ramankutty and Foley (1999) potential vegetation class -> TEM potveg (params/biogeography/tcomm50_lulc.yaml)
+# Ramankutty and Foley (1999) potential vegetation class -> TEM potveg (params/biogeography/tcomm45_lulc.yaml)
 POTVEG_TO_TEM = {
     1: 16,
     2: 18,
@@ -77,7 +77,7 @@ COHORTS = {
 MIXED = {8: (9, 10), 14: (12, 16), 27: (12, 16), 31: (10, 12)}
 SECONDARY_AGE = 425.0  # standage when states.nc has no secma
 LUH2 = "https://luh.umd.edu/LUH2/LUH2_v2h"
-# TEM vegetation types and names, from params/biogeography/tcomm50_lulc.yaml (attributes of lulc.nc)
+# TEM vegetation types and names, from params/biogeography/tcomm45_lulc.yaml (attributes of lulc.nc)
 VEG_TYPES = list(range(1, 57))
 VEG_NAMES = (
     "Ice",
@@ -392,7 +392,7 @@ def elev(a: argparse.Namespace) -> None:
 
 
 def wind(a: argparse.Namespace) -> None:
-    """Monthly mean wind [m s-1] of WorldClim 2.1 (1970-2000, 10 arc-minutes). The height is 2 m, see docs/global_data.md."""
+    """Monthly mean wind [m s-1] of WorldClim 2.1 (1970-2000, 10 arc-minutes). The height is 2 m, see technical_desc.md."""
     import rioxarray as rx
 
     lon, lat = target(a)
@@ -455,7 +455,7 @@ def ozone(a: argparse.Namespace) -> None:
         token = os.environ.get("CEDA_TOKEN")
         if not token:
             raise SystemExit(
-                "ozone: set CEDA_TOKEN (docs/global_data.md) or pass --file"
+                "ozone: set CEDA_TOKEN (technical_desc.md) or pass --file"
             )
         file = fetch(
             CEDA_OZONE + "?download=1",
@@ -632,7 +632,7 @@ def lulc(a: argparse.Namespace) -> None:
 def gdp(a: argparse.Namespace) -> None:
     """GDP per person [thousand US$] (lat, lon) from a NetCDF given by --file and --var; a time axis is averaged. The fire terms of GDSTEM-FIRE need it."""
     if not a.file:
-        raise SystemExit("gdp: pass --file and --var (docs/global_data.md)")
+        raise SystemExit("gdp: pass --file and --var (technical_desc.md)")
     if not a.var:
         raise SystemExit(f"gdp: pass --var, one of {list(xr.open_dataset(a.file).data_vars)}")
     climatology(a, a.file, a.var, a.scale, "gdp", "thousand US$ per person", False)
@@ -641,7 +641,7 @@ def gdp(a: argparse.Namespace) -> None:
 def cropfire(a: argparse.Namespace) -> None:
     """Month of crop burning (1 to 12, 0 for none) from a NetCDF given by --file and --var: the median of the source cells in each target cell, rounded."""
     if not a.file or not a.var:
-        raise SystemExit("cropfire: pass --file and --var (docs/global_data.md)")
+        raise SystemExit("cropfire: pass --file and --var (technical_desc.md)")
     ds = xr.open_dataset(a.file)
     da = ds[a.var].rename(
         {k: v for k, v in (("longitude", "lon"), ("latitude", "lat")) if k in ds[a.var].dims}

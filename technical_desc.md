@@ -1,3 +1,7 @@
+# TEM_UW_APP technical description
+
+Build options, the workflow and the keys of `run_config.yaml` are in [README.md](README.md) and [config_desc.md](config_desc.md). This file describes how the input files are built and where the data come from.
+
 # Global input data
 
 `src/gen_static_inputs.py` writes the input files of TEM_2026 for any bounding box and resolution (run it from the root of TEM_UW_APP).
@@ -127,7 +131,7 @@ For the mixed potential types 8, 14, 27 and 31 the primary and the secondary coh
 `chrtarea` is the area in km2 and `FRI` is 2000. A cohort exists where its area exceeds `--min-area` (0.001 km2). The model counts the cohorts of each cell from the cells where `standage` has data.
 `cohort` lists the cohort names; `potveg`, `currentveg` and `subtype` carry `flag_values` and `flag_meanings` that list the TEM vegetation types by name.
 
-The 15 classes of Ramankutty and Foley map to TEM types (`params/biogeography/tcomm50_lulc.yaml` of TEM_2026) as 1 to 16, 2 to 18, 3 to 33, 4 to 9, 5 to 10,
+The 15 classes of Ramankutty and Foley map to TEM types (`params/biogeography/tcomm45_lulc.yaml` of TEM_2026) as 1 to 16, 2 to 18, 3 to 33, 4 to 9, 5 to 10,
 6 and 7 to 4, 8 to 8, 9 to 14 (31 poleward of 23.5 degrees), 10 to 13, 11 and 12 to 15, 13 to 3, 14 to 21 and 15 to 2.
 The Hurtt file used TEM's own finer potential vegetation: in 3381 cells of the lower 48 states it agrees with this crosswalk in 44 percent of the cells, so results differ from the old runs where the types differ.
 The savanna rule, the crosswalk and the age of secondary stands are assumptions of the script; the model developers should confirm them before a production run.

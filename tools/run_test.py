@@ -14,7 +14,7 @@ Climate is ERA5 daily statistics of one year, downloaded by src/gen_climate_inpu
 case aggregates it to months, the daily case runs the 365 days of that year (set run_length: 7 with run_length_units: days to stop after a week).
 Every other input is made by src/gen_static_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
 wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) and N deposition (ISIMIP3b). Ozone comes from
-CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (docs/global_data.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
+CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (technical_desc.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
 (AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
 
 20261109 Changed: one build_mpi of TEM_2026 runs the monthly and the daily case (build_mpi_daily removed).

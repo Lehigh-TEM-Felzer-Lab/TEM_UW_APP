@@ -90,7 +90,7 @@ regrid_method: box_mean # box_mean (area average, when the source is finer) | bi
 climate_file: null # Climate (REQUIRED), merged by coordinates; units come from the "units" attribute
 netcdf_climate_in_frequency: monthly # hourly | daily | monthly, the time step of climate_file
 static_file: null # elev, sand, silt, clay, ndep (lat, lon); wind, ozone (month, lat, lon)
-lulc_file: null # Land cover, (cohort, lat, lon); the fields of TEM_2026 docs/data.md
+lulc_file: null # Land cover, (cohort, lat, lon); the fields of TEM_2026 technical_desc.md
 co2_file: null # co2 (time), annual
 lightning_file: null # lightning_flashes, km-2 month-1 (12 months, lat, lon); needed when veg_fire is 1
 population_file: null # population_density, km-2 (lat, lon); needed when veg_fire is 1
@@ -200,26 +200,26 @@ ostateyear: 0 # Year of the state written when ostateflag is 2
 # -----------------------------------------------------------------------------
 # One set of params/ per run: biogeography, gdstem, gdstem_fire or glstem.
 
-cmntecd: "{tem_src}/params/biogeography/tcomm50_lulc.yaml" # Vegetation mosaics
-rootzecd: "{tem_src}/params/biogeography/trotz50_lulc.yaml" # Rooting depth
-vegecd: "{tem_src}/params/biogeography/tveg50_lulc.yaml" # Vegetation
-conductecd: "{tem_src}/params/biogeography/tconduct50_lulc.yaml" # Hydraulic conductance
-mcrbecd: "{tem_src}/params/biogeography/tmcrv50_lulc.yaml" # Microbial
-agecd: "{tem_src}/params/biogeography/ag50_lulc.yaml" # Agriculture
+cmntecd: "{tem_src}/params/biogeography/tcomm45_lulc.yaml" # Vegetation mosaics
+rootzecd: "{tem_src}/params/biogeography/trotz45_lulc.yaml" # Rooting depth
+vegecd: "{tem_src}/params/biogeography/tveg45_lulc.yaml" # Vegetation
+conductecd: "{tem_src}/params/biogeography/tconduct45_lulc.yaml" # Hydraulic conductance
+mcrbecd: "{tem_src}/params/biogeography/tmcrv45_lulc.yaml" # Microbial
+agecd: "{tem_src}/params/biogeography/ag45_lulc.yaml" # Agriculture
 # Site calibrations use top-level *_dat keys. Each file declares its TEM community ID.
-ice_dat: "{tem_src}/params/biogeography/ice50_openn_303.yaml"
-tpd_dat: "{tem_src}/params/biogeography/tpd50_openn_303.yaml"
-bnz_dat: "{tem_src}/params/biogeography/bnz50_openn_303.yaml"
-hvc_dat: "{tem_src}/params/biogeography/hvc50_openn_dndc.yaml"
-hvd_dat: "{tem_src}/params/biogeography/hvd50_openn_dndc.yaml"
-knz_ag0_dat: "{tem_src}/params/biogeography/knz50_openn_303_ag0.yaml"
-pwn_dat: "{tem_src}/params/biogeography/pwn50_openn_303.yaml"
-cur_dat: "{tem_src}/params/biogeography/cur50_openn_303.yaml"
-duc_dat: "{tem_src}/params/biogeography/duc50_openn_303.yaml"
-gux_dat: "{tem_src}/params/biogeography/gux50_openn_303.yaml"
-tai_dat: "{tem_src}/params/biogeography/tai50_openn_303.yaml"
-gum_dat: "{tem_src}/params/biogeography/gum50_openn_303.yaml"
-kbm_dat: "{tem_src}/params/biogeography/kbm50_openn_303.yaml"
-turf_dat: "{tem_src}/params/biogeography/turf50_openn_303.yaml"
-knz_ag2_dat: "{tem_src}/params/biogeography/knz50_openn_303_ag2.yaml"
+ice_dat: "{tem_src}/params/biogeography/ice45_openn_303.yaml"
+tpd_dat: "{tem_src}/params/biogeography/tpd45_openn_303.yaml"
+bnz_dat: "{tem_src}/params/biogeography/bnz45_openn_303.yaml"
+hvc_dat: "{tem_src}/params/biogeography/hvc45_openn_dndc.yaml"
+hvd_dat: "{tem_src}/params/biogeography/hvd45_openn_dndc.yaml"
+knz_ag0_dat: "{tem_src}/params/biogeography/knz45_openn_303_ag0.yaml"
+pwn_dat: "{tem_src}/params/biogeography/pwn45_openn_303.yaml"
+cur_dat: "{tem_src}/params/biogeography/cur45_openn_303.yaml"
+duc_dat: "{tem_src}/params/biogeography/duc45_openn_303.yaml"
+gux_dat: "{tem_src}/params/biogeography/gux45_openn_303.yaml"
+tai_dat: "{tem_src}/params/biogeography/tai45_openn_303.yaml"
+gum_dat: "{tem_src}/params/biogeography/gum45_openn_303.yaml"
+kbm_dat: "{tem_src}/params/biogeography/kbm45_openn_303.yaml"
+turf_dat: "{tem_src}/params/biogeography/turf45_openn_303.yaml"
+knz_ag2_dat: "{tem_src}/params/biogeography/knz45_openn_303_ag2.yaml"
 rodale_ag2_dat: "{tem_src}/params/biogeography/rodale_openn_303_ag2.yaml"
