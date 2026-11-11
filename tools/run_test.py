@@ -3,21 +3,26 @@
     python run_test.py                  # monthly and daily case
     python run_test.py --all            # plus every case behind a flag
     python run_test.py --only monthly,fire
+    python run_test.py --mock-era5 --all   # synthetic forcing, no CDS account needed
 
-Everything happens in WORK (default /users/jkodero/research/scratch/tem_test): repos/, downloads/, data/, cases/<name>/,
+The cells run under srun inside the batch job (the app only stages the case: run_model is false); --srun-args adds options
+(write it as --srun-args=--mpi=pmix). Everything happens in WORK (default /users/jkodero/research/scratch/tem_test): repos/, downloads/, data/, cases/<name>/,
 summary.yaml and archive_<time>.tar.gz. Steps whose output exists are skipped, so a second run only repeats what failed;
 --force removes the case directories first. Needs git, make, mpicxx, libyaml, libnetcdf, wget and the python packages of
-TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store). TEM_MODULES="gcc openmpi" loads modules around
+TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store; not needed with --mock-era5). TEM_MODULES="gcc openmpi" loads modules around
 every command.
 
 Climate is ERA5 daily statistics of one year, downloaded by src/gen_climate_inputs.py (CDS dataset derived-era5-single-levels-daily-statistics). The monthly
 case aggregates it to months, the daily case runs the 365 days of that year (set run_length: 7 with run_length_units: days to stop after a week).
+With --mock-era5, xarray writes deterministic synthetic forcing to downloads/era5_mock/climate_era5.nc, with the variables and the
+daily coverage of the downloaded input; it tests the workflow and the fluxes are not realistic.
 Every other input is made by src/gen_static_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
 wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) and N deposition (ISIMIP3b). Ozone comes from
 CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (technical_desc.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
 (AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
 
 20261109 Changed: one build_mpi of TEM_2026 runs the monthly and the daily case (build_mpi_daily removed).
+20261110 Changed: the model runs under srun (the case is staged with run_model: false); --mock-era5 and --srun-args added.
 """
 
 import argparse
@@ -32,6 +37,7 @@ import time
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import xarray as xr
@@ -176,6 +182,59 @@ def era5(work: Path) -> Path:
     return out
 
 
+def mock_era5(work: Path) -> Path:
+    """downloads/era5_mock/climate_era5.nc: daily synthetic forcing of YEAR on the 1 degree grid of BOX."""
+    out = work / "downloads" / "era5_mock" / "climate_era5.nc"
+    if out.exists():
+        return out
+    lon = np.arange(BOX["lon_min"], BOX["lon_max"] + 0.5).round(4).astype("float32")
+    lat = np.arange(BOX["lat_min"], BOX["lat_max"] + 0.5).round(4).astype("float32")
+    time_axis = np.arange(
+        np.datetime64(f"{YEAR}-01-01"),
+        np.datetime64(f"{YEAR + 1}-01-01"),
+        np.timedelta64(1, "D"),
+    )
+    # latitude and season vary the fields; the values are the same on every run
+    hemisphere = np.sin(np.deg2rad(lat))[None, :]
+    latitude = np.abs(hemisphere)
+    phase = 2 * np.pi * (np.arange(time_axis.size)[:, None] - 172) / time_axis.size
+    season = hemisphere * np.cos(phase)
+    tair = 300.15 - 37 * latitude + 10 * season
+    fields = {
+        "tair": (tair, "K"),
+        "tmin": (tair - 4, "K"),
+        "tmax": (tair + 5, "K"),
+        "prec": ((0.0005 + 0.0025 * (1 - latitude)) * (1 + 0.4 * season), "m"),
+        "nirr": (np.maximum(10, 250 - 160 * latitude + 110 * season) * 86400, "J m-2"),
+        "dewpoint": (tair - 7, "K"),
+    }
+    shape = (time_axis.size, lat.size, lon.size)
+    ds = xr.Dataset(
+        {
+            name: (
+                ("time", "lat", "lon"),
+                np.broadcast_to(values.astype("float32")[:, :, None], shape),
+                {"units": unit},
+            )
+            for name, (values, unit) in fields.items()
+        },
+        coords={
+            "time": time_axis,
+            "lat": ("lat", lat, {"units": "degrees_north"}),
+            "lon": ("lon", lon, {"units": "degrees_east"}),
+        },
+        attrs={"source": "synthetic ERA5-style forcing for TEM workflow tests"},
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    encoding = {name: {"zlib": True, "complevel": 1} for name in fields}
+    with TemporaryDirectory(dir=out.parent) as directory:
+        staged = Path(directory) / out.name
+        ds.to_netcdf(staged, engine="netcdf4", encoding=encoding)
+        staged.replace(out)
+    say(f"wrote mock ERA5 forcing {out}")
+    return out
+
+
 def static_data(work: Path, args: argparse.Namespace) -> Path:
     """data/: co2, elev, soil, wind, ozone, ndep, static, lulc, flash and popdens at the model grid, all made here."""
     data, app = work / "data", work / "repos" / "TEM_UW_APP"
@@ -269,7 +328,7 @@ def run_case(
         "tem_src": str(work / "repos" / "TEM_2026"),
         "tem_exe": f"{work / 'repos' / 'TEM_2026' / exe}",
         "run_mode": "local",
-        "run_model": True,
+        "run_model": False,  # the app stages the case, srun runs the model
         "n_cpus": ncpu,
         "region": "GLOBAL_1DEG",
         "horizontal_resolution": 1.0,
@@ -313,6 +372,15 @@ def run_case(
         log=case / "driver.out",
         env={"TEM_UW_APP_ROOT": str(app), "PYTHONPATH": str(app / "src")},
     )
+    if rc == 0:
+        (case / "OUTPUT").mkdir(exist_ok=True)
+        for stale in (case / "OUTPUT").glob("tem.nc*"):
+            stale.unlink()
+        rc = sh(
+            ["srun", "-n", str(ncpu), *shlex.split(args.srun_args), cfg["tem_exe"]],
+            cwd=case,
+            log=case / "logs" / "tem.out",
+        )
     res = {"case": name, "rc": rc, "minutes": (time.time() - start) / 60, "note": ""}
     out = case / "OUTPUT" / "tem.nc"
     if rc == 0 and out.exists():
@@ -391,6 +459,16 @@ def main() -> int:
         "--box",
         help="--box=lon_min,lon_max,lat_min,lat_max instead of the globe (quick tests)",
     )
+    p.add_argument(
+        "--mock-era5",
+        action="store_true",
+        help="synthetic daily forcing instead of the ERA5 download (workflow test only)",
+    )
+    p.add_argument(
+        "--srun-args",
+        default="",
+        help='extra options of srun, written --srun-args="--mpi=pmix"',
+    )
     p.add_argument("--skip-build", action="store_true")
     p.add_argument(
         "--keep-inputs",
@@ -419,7 +497,7 @@ def main() -> int:
         clone(work)
         if not a.skip_build:
             build(work, min(a.ncpu, 16), flags, names)
-        climate = era5(work)
+        climate = mock_era5(work) if a.mock_era5 else era5(work)
         data = static_data(work, a)
         for n in names:
             say(f"case {n}")
