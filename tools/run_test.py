@@ -6,8 +6,8 @@
     python run_test.py --mock-era5 --all   # synthetic forcing, no CDS account needed
 
 The cells run under srun inside the batch job (the app only stages the case: run_model is false); --srun-args adds options
-(write it as --srun-args=--mpi=pmix). Everything happens in WORK (default /users/jkodero/research/scratch/tem_test): repos/, downloads/, data/, cases/<name>/,
-summary.yaml and archive_<time>.tar.gz. Steps whose output exists are skipped, so a second run only repeats what failed;
+(write it as --srun-args=--mpi=pmix). Everything happens in WORK (default: the current directory): repos/, downloads/, data/, cases/<name>/,
+summary.yaml and archive_<time>.tar.gz. Downloads and inputs that exist are reused and the build is incremental; the cases always run again.
 --force removes the case directories first. Needs git, make, mpicxx, libyaml, libnetcdf, wget and the python packages of
 TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store; not needed with --mock-era5). TEM_MODULES="gcc openmpi" loads modules around
 every command.
@@ -18,11 +18,18 @@ With --mock-era5, xarray writes deterministic synthetic forcing to downloads/era
 daily coverage of the downloaded input; it tests the workflow and the fluxes are not realistic.
 Every other input is made by src/gen_static_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
 wind (WorldClim), land cover (LUH2), lightning (LIS/OTD), population (WorldPop) and N deposition (ISIMIP3b). Ozone comes from
-CEDA when CEDA_TOKEN is set; lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login), without it the fire cases are skipped (technical_desc.md) or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used
-(AOT40 0), as is for a step that fails (N deposition 1000 mg N m-2 yr-1); the log says so, and fluxes are then not realistic.
+CEDA when CEDA_TOKEN is set or from --ozone FILE:VAR[:SCALE]; otherwise a constant placeholder is used (AOT40 0), as is for a step
+that fails (N deposition 1000 mg N m-2 yr-1). Lightning needs EARTHDATA_TOKEN or ~/.netrc (NASA Earthdata Login); without it the
+fire case is skipped. GDP per person comes from --gdp FILE:VAR[:SCALE] (technical_desc.md of the app, Fire inputs) or is a constant
+placeholder (10 thousand US dollars per person). The log says so, and fluxes are then not realistic.
+
+The fire case runs with the parameter files of params/gdstem_fire (the fire model needs igef, fsr and fd), so it has its own land
+cover file, numbered with the tcomm45_lulc.yaml of that set; every other case uses params/gdstem.
 
 20241109 Changed: one build_mpi of XTEM runs the monthly and the daily case (build_mpi_daily removed).
 20241110 Changed: the model runs under srun (the case is staged with run_model: false); --mock-era5 and --srun-args added.
+20241111 Changed: repository XTEM; the land cover is numbered with the tcomm45_lulc.yaml of the parameter set; fire is the GDSTEM-FIRE
+         model (gdp_file, params/gdstem_fire; fire_seed and fire_mode, competition and wood_pools are gone); --gdp added.
 """
 
 import argparse
@@ -52,16 +59,16 @@ YEAR = 2019  # a year without 29 February
 BOX = {"lon_min": -180.0, "lon_max": 179.0, "lat_min": -89.0, "lat_max": 89.0}
 OZONE = 0.0  # placeholder AOT40 [ppb h]
 NDEP = 1000.0  # placeholder N deposition [mg N m-2 yr-1]
+GDP = 10.0  # placeholder GDP per person [thousand US dollars]
 VARMAP = {
     k: k for k in ("tair", "tmin", "tmax", "prec", "nirr", "dewpoint")
 }  # names written by gen_climate_inputs.py
 OUTVARS = ["gpp", "npp", "nep", "vegc", "soilorgc"]
-DAILY_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years": 300}
-FAST_EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years": 300}
-# name -> (flag, overrides of run_config.yaml); "exe" selects the executable, "needs" a case that runs first
+EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years": 300}  # daily cases and --fast
+# name -> (flag, overrides of run_config.yaml); "needs" is a case that runs first, "fire" adds the fire inputs and params/gdstem_fire
 CASES = {
     "monthly": ("", {"ostateflag": 1}),
-    "daily": ("", {"run_dt_units": "day", **DAILY_EQUIL}),
+    "daily": ("", {"run_dt_units": "day", **EQUIL}),
     "fire": ("fire", {"veg_fire": 1, "fire": True}),
     "spin_numspin": ("spin", {"spinflag": 1, "numspin": 2, "spintime": 20}),
     "spin_dynamic": ("spin", {"spinflag": 2, "de_nyears": 1}),
@@ -78,6 +85,8 @@ CASES = {
     "restart": ("restart", {"istateflag": 1, "needs": "monthly"}),
 }
 FLAGS = sorted({v[0] for v in CASES.values() if v[0]})
+SETS = ("gdstem", "gdstem_fire")  # parameter sets used by the cases
+PARAM_KEYS = ("cmntecd", "rootzecd", "vegecd", "conductecd", "mcrbecd", "agecd")
 t0 = time.time()
 
 
@@ -109,6 +118,10 @@ def sh(
 
 def need(cmd: list[str], **kw) -> None:
     if sh(cmd, **kw):
+        log = kw.get("log")
+        if log and Path(log).exists():
+            tail = "\n".join(Path(log).read_text().splitlines()[-40:])
+            print(f"--- last lines of {log}\n{tail}\n---", flush=True)
         sys.exit(f"failed: {' '.join(cmd)}")
 
 
@@ -121,7 +134,7 @@ def clone(work: Path) -> None:
             need(["git", "-C", str(dest), "pull", "--ff-only", "-q"])
         else:
             need(["git", "clone", "-q", f"{GITHUB}/{repo}", str(dest)])
-    for name in ("XTEM", "TEM_UW_APP"):
+    for name in REPOS:
         rev = subprocess.run(
             ["git", "-C", str(work / "repos" / name), "log", "--oneline", "-1"],
             capture_output=True,
@@ -131,8 +144,8 @@ def clone(work: Path) -> None:
         say(f"{name} {rev.stdout.strip()}")
 
 
-def build(work: Path, jobs: int, flags: set[str], only: list[str] | None) -> None:
-    """build_mpi/, which runs the monthly and the daily cases."""
+def build(work: Path, jobs: int) -> None:
+    """build_mpi/xtem of XTEM, which runs the monthly and the daily cases (fire is compiled in: FIRE=1 is the default)."""
     src = work / "repos" / "XTEM"
     if shutil.which("mpicxx") is None and not os.environ.get("TEM_MODULES"):
         sys.exit(
@@ -229,24 +242,26 @@ def mock_era5(work: Path) -> Path:
     return out
 
 
-def static_data(work: Path, args: argparse.Namespace) -> Path:
-    """data/: co2, elev, soil, wind, ozone, ndep, static, lulc, flash and popdens at the model grid, all made here."""
+def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
+    """data/: co2, elev, soil, wind, ozone, ndep, gdp, static, flash and popdens at the model grid; data/lulc_<set>/lulc.nc for each parameter set."""
     data, app = work / "data", work / "repos" / "TEM_UW_APP"
     data.mkdir(exist_ok=True)
     (work / "logs").mkdir(exist_ok=True)
-    grid = ["--out", str(data), "--cache", str(work / "downloads"), "--res", "1.0"]
+    grid = ["--cache", str(work / "downloads"), "--res", "1.0"]
     grid += ["--bbox", *map(str, BOX.values())]
 
-    def make(*sub: str) -> int:
-        say(f"data: {sub[0]}")
+    def make(*sub: str, out: Path = data, tag: str = "") -> int:
+        say(f"data: {sub[0]}{tag}")
         return sh(
             [
                 sys.executable,
                 str(app / "src" / "gen_static_inputs.py"),
+                "--out",
+                str(out),
                 *grid,
                 *sub,
             ],
-            log=work / "logs" / f"data_{sub[0]}.log",
+            log=work / "logs" / f"data_{sub[0]}{tag}.log",
         )
 
     for f, sub in {
@@ -257,13 +272,21 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
     }.items():
         if not (data / f).exists() and make(*sub):
             sys.exit(f"data step failed: {sub[0]} (logs/data_{sub[0]}.log)")
-    # inputs of the fire cases and of the ozone and N deposition files; a failed step leaves the file out or a placeholder
-    for f, sub in {"flash.nc": ("lightning",), "popdens.nc": ("population",)}.items():
-        if not (data / f).exists() and make(*sub):
-            say(
-                f"WARNING {sub[0]} failed, the fire cases are skipped (logs/data_{sub[0]}.log)"
-            )
-    for name, spec, const in (("ozone", args.ozone, OZONE), ("ndep", args.ndep, NDEP)):
+    # inputs of the fire case; a failed step leaves the file out and the case is skipped
+    if "gdstem_fire" in sets:
+        for f, sub in {
+            "flash.nc": ("lightning",),
+            "popdens.nc": ("population",),
+        }.items():
+            if not (data / f).exists() and make(*sub):
+                say(
+                    f"WARNING {sub[0]} failed, the fire case is skipped (logs/data_{sub[0]}.log)"
+                )
+    # inputs with a placeholder when the source is not available
+    placeholders = [("ozone", args.ozone, OZONE), ("ndep", args.ndep, NDEP)]
+    if "gdstem_fire" in sets:
+        placeholders.append(("gdp", args.gdp, GDP))
+    for name, spec, const in placeholders:
         if (data / f"{name}.nc").exists():
             continue
         if spec:
@@ -272,19 +295,23 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
                 make(name, "--file", file, "--var", var, "--scale", *(scale or ["1"]))
                 == 0
             )
-        elif name == "ndep" or os.environ.get("CEDA_TOKEN"):
+        elif name == "ndep" or (name == "ozone" and os.environ.get("CEDA_TOKEN")):
             ok = make(name) == 0
         else:
             ok = False
         if not ok:
-            say(f"data: {name} placeholder {const} (ozone needs CEDA_TOKEN or --ozone)")
+            say(f"data: {name} placeholder {const}")
             lon = np.arange(BOX["lon_min"], BOX["lon_max"] + 0.5).astype("float32")
             lat = np.arange(BOX["lat_min"], BOX["lat_max"] + 0.5).astype("float32")
             shape = (
                 (12, lat.size, lon.size) if name == "ozone" else (lat.size, lon.size)
             )
             dims = ("month", "lat", "lon") if name == "ozone" else ("lat", "lon")
-            unit = "ppb h" if name == "ozone" else "mg N m-2 yr-1"
+            unit = {
+                "ozone": "ppb h",
+                "ndep": "mg N m-2 yr-1",
+                "gdp": "thousand US dollars per person",
+            }[name]
             xr.Dataset(
                 {
                     name: (
@@ -297,9 +324,34 @@ def static_data(work: Path, args: argparse.Namespace) -> Path:
             ).to_netcdf(data / f"{name}.nc")
     if not (data / "static.nc").exists() and make("static"):
         sys.exit("data step failed: static (logs/data_static.log)")
-    if not (data / "lulc.nc").exists() and make("lulc"):
-        sys.exit("data step failed: lulc (logs/data_lulc.log)")
+    # the type numbers of the land cover depend on the parameter set (tcomm45_lulc.yaml of the set)
+    for s in sorted(sets):
+        out = data / f"lulc_{s}"
+        out.mkdir(exist_ok=True)
+        tcomm = work / "repos" / "XTEM" / "params" / s / "tcomm45_lulc.yaml"
+        if not (out / "lulc.nc").exists() and make(
+            "lulc", "--tcomm", str(tcomm), out=out, tag=f"_{s}"
+        ):
+            sys.exit(f"data step failed: lulc {s} (logs/data_lulc_{s}.log)")
     return data
+
+
+def param_overrides(work: Path, pset: str) -> dict:
+    """Parameter file keys of the app's run_config.yaml, with params/gdstem replaced by params/<pset>; every file must exist."""
+    src = work / "repos" / "XTEM"
+    default = yaml.safe_load(
+        (work / "repos" / "TEM_UW_APP" / "config" / "run_config.yaml").read_text()
+    )
+    out = {}
+    for key, value in default.items():
+        is_param = key in PARAM_KEYS or (key.endswith("_dat") and len(key) > 4)
+        if is_param and isinstance(value, str):
+            new = value.replace("/params/gdstem/", f"/params/{pset}/")
+            path = Path(new.replace("{tem_src}", str(src)))
+            if not path.exists():
+                sys.exit(f"{key}: {path} does not exist in the parameter set {pset}")
+            out[key] = new
+    return out
 
 
 def run_case(
@@ -318,6 +370,8 @@ def run_case(
     case.mkdir(parents=True, exist_ok=True)
     exe = "build_mpi/xtem"
     needs = over.pop("needs", None)
+    fire = over.pop("fire", False)
+    pset = "gdstem_fire" if fire else "gdstem"
     cfg = {
         "tem_src": str(work / "repos" / "XTEM"),
         "tem_exe": f"{work / 'repos' / 'XTEM' / exe}",
@@ -333,26 +387,31 @@ def run_case(
         "climate_file": str(climate),
         "netcdf_climate_in_frequency": "daily",
         "static_file": str(data / "static.nc"),
-        "lulc_file": str(data / "lulc.nc"),
+        "lulc_file": str(data / f"lulc_{pset}" / "lulc.nc"),
         "co2_file": str(data / "co2.nc"),
         "varmap": VARMAP,
         "clmoutvars": ["tair"],
         "temoutvars": OUTVARS,
     }
-    if over.pop("fire", False):
-        if not (data / "flash.nc").exists() or not (data / "popdens.nc").exists():
+    if fire:
+        missing = [
+            f for f in ("flash.nc", "popdens.nc", "gdp.nc") if not (data / f).exists()
+        ]
+        if missing:
             return {
                 "case": name,
                 "rc": -1,
                 "minutes": 0.0,
-                "note": "skipped: no flash.nc or popdens.nc",
+                "note": f"skipped: no {' '.join(missing)}",
             }
         cfg |= {
             "lightning_file": str(data / "flash.nc"),
             "population_file": str(data / "popdens.nc"),
+            "gdp_file": str(data / "gdp.nc"),
         }
+        cfg |= param_overrides(work, pset)
     if args.fast and over.get("run_dt_units") != "day":
-        cfg |= FAST_EQUIL
+        cfg |= EQUIL
     cfg |= over
     if needs:
         cfg |= {"istatefile": str(work / "cases" / needs / "OUTPUT" / "temstate.nc")}
@@ -421,7 +480,7 @@ def main() -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--work", default="/users/jkodero/research/scratch/tem_test")
+    p.add_argument("--work", default=os.getcwd(), help="work directory (default: current directory)")
     p.add_argument(
         "--ncpu", type=int, default=int(os.environ.get("SLURM_NTASKS", "32"))
     )
@@ -440,6 +499,10 @@ def main() -> int:
     p.add_argument(
         "--ndep",
         help="FILE:VAR:SCALE of a N deposition file instead of the placeholder",
+    )
+    p.add_argument(
+        "--gdp",
+        help="FILE:VAR[:SCALE] of a GDP per person file (thousand US dollars) instead of the placeholder of the fire case",
     )
     p.add_argument(
         "--fast",
@@ -485,14 +548,15 @@ def main() -> int:
         dep = CASES[n][1].get("needs")
         if dep and dep not in names:
             names.insert(0, dep)
+    sets = {"gdstem_fire" if CASES[n][1].get("fire") else "gdstem" for n in names}
     signal.signal(signal.SIGTERM, lambda *_: sys.exit("SIGTERM: archiving what exists"))
     rows: list[dict] = []
     try:
         clone(work)
         if not a.skip_build:
-            build(work, min(a.ncpu, 16), flags, names)
+            build(work, min(a.ncpu, 16))
         climate = mock_era5(work) if a.mock_era5 else era5(work)
-        data = static_data(work, a)
+        data = static_data(work, a, sets)
         for n in names:
             say(f"case {n}")
             rows.append(run_case(n, work, climate, data, a, a.ncpu))
@@ -500,7 +564,7 @@ def main() -> int:
             (work / "summary.yaml").write_text(yaml.safe_dump(rows, sort_keys=False))
     finally:
         archive(work, a.keep_inputs)
-    return int(any(r["rc"] for r in rows))
+    return int(any(r["rc"] and not r["note"].startswith("skipped") for r in rows))
 
 
 if __name__ == "__main__":
