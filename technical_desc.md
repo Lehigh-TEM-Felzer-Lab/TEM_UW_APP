@@ -21,7 +21,7 @@ LUH2 (6 GB) is downloaded unless `--luh2` and `--luh2-static` point to local cop
 
 Every step downloads its source into `--cache` once. `tools/run_test.py` runs all of them for the globe at 1 degree.
 `static` merges the elevation, soil, wind, ozone and N deposition files into `static.nc`. The app makes `climate.nc` from climate files such as those of `src/gen_climate_inputs.py` (see Climate forcing).
-The regridding is the mean of the source cells in a target cell, so the target should be coarser than the source.
+The regridding is the mean of the source cells in a target cell, so the target should be coarser than the source. The land cover is aggregated by land area instead (`src/tem_regrid.py`): `chrtarea` is summed, categories take the value with the largest land area, `standage` is weighted by `chrtarea`, and a target cell whose land area is below `land_fraction_min` of the cell has no cohort, so no vegetation is placed over water. A land cover coarser than the model grid is refused.
 
 ## Climate forcing
 

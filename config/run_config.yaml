@@ -60,7 +60,6 @@ partition: null # Partition to submit the job to
 n_cpus_per_task: 1 # CPUs per task
 mem: 0 # Total job memory [GB]. Used only when above 2 GB per task (mem > 2 * tasks); otherwise, and for 0, the scheduler default applies.
 sbatch_options: "" # Additional raw options passed directly to sbatch, for example "--account=myproj --mail-type=END"
-logfile: tem_driver # Basename of the driver log written in the case directory (<logfile>.log)
 
 # -----------------------------------------------------------------------------
 # 2. CASE METADATA
@@ -78,7 +77,8 @@ lon_min: null # REQUIRED
 lon_max: null # REQUIRED
 lat_min: null # REQUIRED
 lat_max: null # REQUIRED
-regrid_method: box_mean # box_mean (area average, when the source is finer) | bilinear | nearest. Categorical fields always use nearest.
+regrid_method: box_mean # box_mean (area average, when the source is finer) | bilinear | nearest. Other fields (not the land cover) use this.
+land_fraction_min: 0.5 # land cover: a model cell is land, and gets cohorts, when its land area is at least this fraction of the cell. The land cover is summed by area (chrtarea), takes the majority by area for categories and is never placed over water.
 
 # -----------------------------------------------------------------------------
 # 4. NETCDF INPUTS AND VARMAP

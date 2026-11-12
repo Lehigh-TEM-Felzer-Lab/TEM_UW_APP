@@ -360,6 +360,10 @@ def soil(a: argparse.Namespace) -> None:
             g = (
                 rx.open_rasterio(tif, masked=True).squeeze(drop=True) / 10
             )  # g/kg -> percent
+            # masked=True turns the nodata of the file (ocean and outside of the projection) into NaN and drops the nodata value. Without it
+            # the warp counts the NaN as data, and the average of a target cell is NaN when one source cell of it is: about 3 of 4 land cells
+            # of the 1 degree grid had no texture, and the model stopped at the first of them.
+            g = g.rio.write_nodata(np.nan, encoded=False)
             acc = acc + thick * g.rio.reproject_match(
                 tmpl, resampling=Resampling.average
             )

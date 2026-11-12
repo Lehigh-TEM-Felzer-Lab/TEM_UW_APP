@@ -10,8 +10,10 @@
 
 import logging
 import re
+import os
 import subprocess
 import sys
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 
@@ -21,6 +23,7 @@ import yaml
 
 import tem_climate as clim
 import tem_config
+import tem_regrid
 
 log = logging.getLogger("DRIVER")
 CLIMATE = {
@@ -93,17 +96,29 @@ def files(paths: list[Path]) -> list[str]:
 
 
 def merged(
-    paths: list[Path], cfg: dict, lon: np.ndarray, lat: np.ndarray
+    paths: list[Path],
+    cfg: dict,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    landcover: bool = False,
 ) -> xr.Dataset:
-    """The regridded variables of all the files."""
-    ds = xr.merge([regrid_file(f, cfg, lon, lat) for f in files(paths)], join="outer")
+    """The regridded variables of all the files. The land cover is aggregated by land area (tem_regrid.py)."""
+    ds = xr.merge(
+        [regrid_file(f, cfg, lon, lat, landcover) for f in files(paths)], join="outer"
+    )
     if "time" in ds.coords:
         year = ds.time.dt.year
         ds = ds.sel(time=(year >= cfg["start_year"]) & (year <= cfg["end_year"]))
     return ds
 
 
-def regrid_file(path: Path, cfg: dict, lon: np.ndarray, lat: np.ndarray) -> xr.Dataset:
+def regrid_file(
+    path: Path,
+    cfg: dict,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    landcover: bool = False,
+) -> xr.Dataset:
     """Every lat/lon variable of a NetCDF file on the model grid."""
     with xr.open_dataset(path, engine="netcdf4") as source:
         ds = source.rename(
@@ -118,6 +133,11 @@ def regrid_file(path: Path, cfg: dict, lon: np.ndarray, lat: np.ndarray) -> xr.D
             .sortby("lon")
             .sortby("lat")
         )
+        on_grid = np.isin(lon, ds.lon).all() and np.isin(lat, ds.lat).all()
+        if landcover and not on_grid and tem_regrid.AREA in ds:
+            return tem_regrid.lulc_to_grid(
+                ds.load(), lon, lat, cfg["horizontal_resolution"], cfg["land_fraction_min"]
+            )
         out = {}
         for name, da in ds.data_vars.items():
             if {"lat", "lon"} <= set(da.dims):
@@ -265,6 +285,33 @@ def write_config(cfg: dict, present: set[str]) -> None:
     )
 
 
+def check_coverage(case: Path) -> None:
+    """Stop before the model starts when a static input has no data in a cell that has land cover.
+
+    The model needs data in every land-cover cell and does not fill gaps. The message names the variables and the counts."""
+    with xr.open_dataset(case / "INPUT" / "lulc.nc") as lulc:
+        if "chrtarea" not in lulc:
+            return
+        land = (lulc["chrtarea"].sum("cohort") > 0).values
+    problems = []
+    with xr.open_dataset(case / "INPUT" / "static.nc") as static:
+        for name, da in static.data_vars.items():
+            if set(da.dims) < {"lat", "lon"} or "lat" not in da.dims:
+                continue
+            extra = [dim for dim in da.dims if dim not in ("lat", "lon")]
+            valid = (da.notnull().all(extra) if extra else da.notnull()).values
+            missing = int((land & ~valid).sum())
+            if missing:
+                problems.append(f"{name}: {missing} of {int(land.sum())} cells")
+    if problems:
+        raise ValueError(
+            "Static inputs have no data in cells with land cover ("
+            + "; ".join(problems)
+            + "). Regenerate the missing input (for soil: gen_static_inputs.py soil) or give a land-cover file that excludes these cells. "
+            "The model does not fill gaps."
+        )
+
+
 def build(cfg: dict) -> None:
     case = cfg["case_dir"]
     for sub in ("INPUT", "OUTPUT"):
@@ -290,7 +337,10 @@ def build(cfg: dict) -> None:
         ("nfert_file", "nfert.nc"),
     ):
         if cfg[key]:
-            present |= save(merged(cfg[key], cfg, lon, lat), case / "INPUT" / name)
+            present |= save(
+                merged(cfg[key], cfg, lon, lat, landcover=key == "lulc_file"),
+                case / "INPUT" / name,
+            )
     if cfg["storm_disturbance"]:
         present |= save(
             merged(cfg["storm_file"], cfg, lon, lat),
@@ -310,6 +360,8 @@ def build(cfg: dict) -> None:
             if len(set(selected.time.dt.year.values)) != selected.sizes["time"]:
                 raise ValueError("CO2 input contains duplicate years")
             present |= save(selected.load(), case / "INPUT" / "co2.nc")
+    if (case / "INPUT" / "static.nc").exists() and (case / "INPUT" / "lulc.nc").exists():
+        check_coverage(case)
     write_config(cfg, present)
     log.info(
         "Built %s: %d x %d cells of %g degrees",
@@ -353,9 +405,18 @@ def run(cfg: dict) -> int:
     if tasks > 1:
         cmd = ["mpirun", "-n", str(tasks), *cmd]
     log.info("Running %s", " ".join(cmd))
-    with open(cfg["case_dir"] / "logs" / "tem.out", "w") as out:
+    # the model writes tem_<id>.out (progress) and tem_<id>.log (everything else); the id is set here so the files are known,
+    # and the .log also gets what the launcher sees (MPI messages, a crash)
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log.info("Run files: tem_%s.out (progress), tem_%s.log (messages)", run_id, run_id)
+    with open(cfg["case_dir"] / f"tem_{run_id}.log", "a") as out:
         status = subprocess.run(
-            cmd, cwd=cfg["case_dir"], stdout=out, stderr=subprocess.STDOUT, check=False
+            cmd,
+            cwd=cfg["case_dir"],
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            env={**os.environ, "TEM_RUN_ID": run_id},
+            check=False,
         ).returncode
     if (
         not status
@@ -363,7 +424,7 @@ def run(cfg: dict) -> int:
         and (not native.exists() or native.stat().st_mtime_ns == before)
     ):
         raise RuntimeError(
-            "TEM produced no new output. Check logs/tem.out and the TEM log."
+            "TEM produced no new output. Check tem_*.log in the case directory."
         )
     if not status:
         clear_rank_files(cfg, native)
@@ -372,14 +433,10 @@ def run(cfg: dict) -> int:
 
 def main() -> int:
     cfg = tem_config.load()
-    (cfg["case_dir"] / "logs").mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(cfg["case_dir"] / f"{cfg['logfile']}.log"),
-        ],
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
     build(cfg)
     return run(cfg) if cfg["run_model"] else 0

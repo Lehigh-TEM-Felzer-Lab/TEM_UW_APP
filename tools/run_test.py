@@ -1,9 +1,13 @@
 """Global 1 degree test of XTEM and TEM_UW_APP: clone, build, get the data, run the cases, archive.
 
-    python run_test.py                  # monthly and daily case
-    python run_test.py --all            # plus every case behind a flag
-    python run_test.py --only monthly,fire
+    python run_test.py                  # monthly case
+    python run_test.py --daily          # plus the case behind a flag
+    python run_test.py --only daily
     python run_test.py --mock-era5 --all   # synthetic forcing, no CDS account needed
+
+Two cases are tested: monthly (equilibrium and one transient year) and daily (365 daily steps, hours long). Restart, fire and the
+sensitivity variants of earlier versions (solver, spin-up, process switches, agriculture) are left out: they exercise switches,
+not the workflow.
 
 The cells run under srun inside the batch job (the app only stages the case: run_model is false); --srun-args adds options
 (write it as --srun-args=--mpi=pmix). Everything happens in WORK (default: the current directory): repos/, downloads/, data/, cases/<name>/,
@@ -28,6 +32,8 @@ cover file, numbered with the tcomm45_lulc.yaml of that set; every other case us
 
 20241109 Changed: one build_mpi of XTEM runs the monthly and the daily case (build_mpi_daily removed).
 20241110 Changed: the model runs under srun (the case is staged with run_model: false); --mock-era5 and --srun-args added.
+20241111 Changed: one case by default (monthly), daily with --daily; no logs directory, the output of every step goes to the terminal; TEM_Biogeography is cloned; inputs are checked before srun (cells without data stop the case at once);
+         srun --kill-on-bad-exit=1; the model writes tem_<id>.out (progress) and tem_<id>.log (all other messages, srun messages too); the id is set here with TEM_RUN_ID.
 20241111 Changed: repository XTEM; the land cover is numbered with the tcomm45_lulc.yaml of the parameter set; fire is the GDSTEM-FIRE
          model (gdp_file, params/gdstem_fire; fire_seed and fire_mode, competition and wood_pools are gone); --gdp added.
 """
@@ -54,6 +60,7 @@ GITHUB = "https://github.com/Lehigh-TEM-Felzer-Lab"
 REPOS = {
     "XTEM": "XTEM",
     "TEM_UW_APP": "TEM_UW_APP",
+    "TEM_Biogeography": "TEM_Biogeography",
 }
 YEAR = 2019  # a year without 29 February
 BOX = {"lon_min": -180.0, "lon_max": 179.0, "lat_min": -89.0, "lat_max": 89.0}
@@ -64,25 +71,15 @@ VARMAP = {
     k: k for k in ("tair", "tmin", "tmax", "prec", "nirr", "dewpoint")
 }  # names written by gen_climate_inputs.py
 OUTVARS = ["gpp", "npp", "nep", "vegc", "soilorgc"]
-EQUIL = {"equil_tau_years": 100.0, "equil_min_years": 100, "equil_max_years": 300}  # daily cases and --fast
+EQUIL = {
+    "equil_tau_years": 100.0,
+    "equil_min_years": 100,
+    "equil_max_years": 300,
+}  # daily cases and --fast
 # name -> (flag, overrides of run_config.yaml); "needs" is a case that runs first, "fire" adds the fire inputs and params/gdstem_fire
 CASES = {
-    "monthly": ("", {"ostateflag": 1}),
-    "daily": ("", {"run_dt_units": "day", **EQUIL}),
-    "fire": ("fire", {"veg_fire": 1, "fire": True}),
-    "spin_numspin": ("spin", {"spinflag": 1, "numspin": 2, "spintime": 20}),
-    "spin_dynamic": ("spin", {"spinflag": 2, "de_nyears": 1}),
-    "ode_rkf": ("solver", {"ode_solver": 2}),
-    "rsoil_q10": ("solver", {"rsoil_method": 1}),
-    "rhmoist_dndc": ("solver", {"rhmoist_method": 2}),
-    "rhmoist_sech": ("solver", {"rhmoist_method": 3}),
-    "no_nfeed": ("process", {"nfeed": 0}),
-    "no_avln": ("process", {"avlnflag": 0}),
-    "baseline": ("process", {"baseline": 1}),
-    "no_moistlim": ("process", {"moistlim": 0}),
-    "no_o3": ("process", {"o3flag": 0}),
-    "agriculture": ("agri", {"agtillflag": 1, "agirrgflag": 1, "agfertflag": 1}),
-    "restart": ("restart", {"istateflag": 1, "needs": "monthly"}),
+    "monthly": ("", {}),
+    "daily": ("daily", {"run_dt_units": "day", **EQUIL}),
 }
 FLAGS = sorted({v[0] for v in CASES.values() if v[0]})
 SETS = ("gdstem", "gdstem_fire")  # parameter sets used by the cases
@@ -99,13 +96,14 @@ def sh(
     cwd: Path | None = None,
     log: Path | None = None,
     env: dict | None = None,
+    append: bool = False,
 ) -> int:
     """Run a command, with the modules of TEM_MODULES loaded; output goes to log or the terminal."""
     mods = os.environ.get("TEM_MODULES", "")
     if mods:
         line = " ".join(shlex.quote(c) for c in cmd)
         cmd = ["bash", "-lc", f"module load {mods} && exec {line}"]
-    with open(log, "w") if log else nullcontext() as out:
+    with open(log, "a" if append else "w") if log else nullcontext() as out:
         return subprocess.run(
             cmd,
             cwd=cwd,
@@ -165,7 +163,6 @@ def era5(work: Path) -> Path:
     if not out.exists():
         if not (Path.home() / ".cdsapirc").exists() and "CDSAPI_KEY" not in os.environ:
             sys.exit("no ~/.cdsapirc: see https://cds.climate.copernicus.eu/how-to-api")
-        (work / "logs").mkdir(exist_ok=True)
         say("ERA5 download")
         if sh(
             [
@@ -183,9 +180,8 @@ def era5(work: Path) -> Path:
                 "--grid",
                 "1.0/1.0",
             ],
-            log=work / "logs" / "era5.log",
         ):
-            sys.exit("ERA5 download failed (logs/era5.log)")
+            sys.exit("ERA5 download failed")
     return out
 
 
@@ -246,7 +242,6 @@ def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
     """data/: co2, elev, soil, wind, ozone, ndep, gdp, static, flash and popdens at the model grid; data/lulc_<set>/lulc.nc for each parameter set."""
     data, app = work / "data", work / "repos" / "TEM_UW_APP"
     data.mkdir(exist_ok=True)
-    (work / "logs").mkdir(exist_ok=True)
     grid = ["--cache", str(work / "downloads"), "--res", "1.0"]
     grid += ["--bbox", *map(str, BOX.values())]
 
@@ -261,7 +256,6 @@ def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
                 *grid,
                 *sub,
             ],
-            log=work / "logs" / f"data_{sub[0]}{tag}.log",
         )
 
     for f, sub in {
@@ -271,7 +265,7 @@ def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
         "wind.nc": ("wind",),
     }.items():
         if not (data / f).exists() and make(*sub):
-            sys.exit(f"data step failed: {sub[0]} (logs/data_{sub[0]}.log)")
+            sys.exit(f"data step failed: {sub[0]}")
     # inputs of the fire case; a failed step leaves the file out and the case is skipped
     if "gdstem_fire" in sets:
         for f, sub in {
@@ -280,7 +274,7 @@ def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
         }.items():
             if not (data / f).exists() and make(*sub):
                 say(
-                    f"WARNING {sub[0]} failed, the fire case is skipped (logs/data_{sub[0]}.log)"
+                    f"WARNING {sub[0]} failed, the fire case is skipped"
                 )
     # inputs with a placeholder when the source is not available
     placeholders = [("ozone", args.ozone, OZONE), ("ndep", args.ndep, NDEP)]
@@ -323,7 +317,7 @@ def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
                 coords={"lat": lat, "lon": lon},
             ).to_netcdf(data / f"{name}.nc")
     if not (data / "static.nc").exists() and make("static"):
-        sys.exit("data step failed: static (logs/data_static.log)")
+        sys.exit("data step failed: static")
     # the type numbers of the land cover depend on the parameter set (tcomm45_lulc.yaml of the set)
     for s in sorted(sets):
         out = data / f"lulc_{s}"
@@ -332,7 +326,7 @@ def static_data(work: Path, args: argparse.Namespace, sets: set[str]) -> Path:
         if not (out / "lulc.nc").exists() and make(
             "lulc", "--tcomm", str(tcomm), out=out, tag=f"_{s}"
         ):
-            sys.exit(f"data step failed: lulc {s} (logs/data_lulc_{s}.log)")
+            sys.exit(f"data step failed: lulc {s}")
     return data
 
 
@@ -352,6 +346,26 @@ def param_overrides(work: Path, pset: str) -> dict:
                 sys.exit(f"{key}: {path} does not exist in the parameter set {pset}")
             out[key] = new
     return out
+
+
+def preflight(case: Path) -> str:
+    """Cells with land cover that lack data in an input stop the model at its start. Say so before 32 ranks are launched."""
+    inp = case / "INPUT"
+    try:
+        with xr.open_dataset(inp / "lulc.nc") as lu:
+            land = (lu["chrtarea"].sum("cohort") > 0).values
+        problems = []
+        with xr.open_dataset(inp / "static.nc") as st:
+            for name in ("sand", "silt", "clay", "elev", "wind", "ozone", "ndep"):
+                if name in st:
+                    a = st[name]
+                    ok = a.notnull().all([d for d in a.dims if d not in ("lat", "lon")]).values if a.ndim > 2 else a.notnull().values
+                    n = int((land & ~ok).sum())
+                    if n:
+                        problems.append(f"{name}: {n} of {int(land.sum())} land cells without data")
+        return "; ".join(problems)
+    except Exception as e:  # a missing file is reported by the model itself
+        return "" if isinstance(e, FileNotFoundError) else f"input check failed: {e}"
 
 
 def run_case(
@@ -416,23 +430,27 @@ def run_case(
     if needs:
         cfg |= {"istatefile": str(work / "cases" / needs / "OUTPUT" / "temstate.nc")}
     (case / "run_config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
-    (case / "logs").mkdir(exist_ok=True)
     app = work / "repos" / "TEM_UW_APP"
     start = time.time()
     rc = sh(
         [sys.executable, str(app / "src" / "driver.py")],
         cwd=case,
-        log=case / "driver.out",
         env={"TEM_UW_APP_ROOT": str(app), "PYTHONPATH": str(app / "src")},
     )
+    bad = preflight(case) if rc == 0 else ""
+    if bad:
+        return {"case": name, "rc": 2, "minutes": (time.time() - start) / 60, "note": "input check: " + bad}
     if rc == 0:
         (case / "OUTPUT").mkdir(exist_ok=True)
         for stale in (case / "OUTPUT").glob("tem.nc*"):
             stale.unlink()
+        runid = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
         rc = sh(
-            ["srun", "-n", str(ncpu), *shlex.split(args.srun_args), cfg["tem_exe"]],
+            ["srun", "-n", str(ncpu), "--kill-on-bad-exit=1", *shlex.split(args.srun_args), cfg["tem_exe"]],
             cwd=case,
-            log=case / "logs" / "tem.out",
+            log=case / f"tem_{runid}.log",  # the model writes this file; srun adds its own messages
+            env={**os.environ, "TEM_RUN_ID": runid},
+            append=True,
         )
     res = {"case": name, "rc": rc, "minutes": (time.time() - start) / 60, "note": ""}
     out = case / "OUTPUT" / "tem.nc"
@@ -446,14 +464,14 @@ def run_case(
     elif rc == 0:
         res["note"] = "no OUTPUT/tem.nc"
     else:
-        tails = [
-            p for p in (case / "logs" / "tem.out", case / "driver.out") if p.exists()
-        ]
-        res["note"] = " | ".join(
-            p.read_text().strip().splitlines()[-1]
-            for p in tails
-            if p.read_text().strip()
-        )[:300]
+        text = ""
+        for f in sorted(case.glob("tem_*.log")):
+            if f.exists() and f.read_text().strip():
+                lines = f.read_text().strip().splitlines()
+                err = [x for x in lines if "ERROR" in x or "Error" in x]
+                text = " | ".join((err or lines)[-3:])
+                break
+        res["note"] = text[:400]
     return res
 
 
@@ -463,9 +481,6 @@ def archive(work: Path, keep_inputs: bool) -> Path:
         for f in ("summary.yaml", "build.log"):
             if (work / f).exists():
                 t.add(work / f, arcname=f)
-        for sub in ("logs",):
-            if (work / sub).exists():
-                t.add(work / sub, arcname=sub)
         for case in sorted((work / "cases").glob("*")):
             t.add(
                 case,
@@ -480,7 +495,11 @@ def main() -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--work", default=os.getcwd(), help="work directory (default: current directory)")
+    p.add_argument(
+        "--work",
+        default=os.getcwd(),
+        help="work directory (default: current directory)",
+    )
     p.add_argument(
         "--ncpu", type=int, default=int(os.environ.get("SLURM_NTASKS", "32"))
     )

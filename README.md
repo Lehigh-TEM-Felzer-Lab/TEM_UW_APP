@@ -42,8 +42,11 @@ XTEM requires g++ 9 or later, make, libyaml and libnetcdf (C). The MPI build als
 run_config.yaml   tem_config.yaml
 INPUT/            climate.nc static.nc lulc.nc co2.nc (flash.nc popdens.nc gdp.nc)
 OUTPUT/           tem.nc, written by the model
-logs/
+tem_<id>.out      progress of the run (written by the model)
+tem_<id>.log      all other messages of the model and the launcher
 ```
+
+The driver writes to the terminal only; the two `tem_<id>` files come from the model (`<id>` is the start date and time).
 
 Without `tem_exe` the app uses `build/xtem`, or `build_mpi/xtem` when `n_cpus` is above 1.
 
@@ -59,7 +62,7 @@ Without `tem_exe` the app uses `build/xtem`, or `build_mpi/xtem` when `n_cpus` i
 | `lightning_file`, `population_file`, `gdp_file` | needed when `veg_fire: 1`; the vegetation parameter file must define `igef`, `fsr` and `fd` (use `params/gdstem_fire`) |
 | `storm_file`, `nfert_file` | needed for `storm_disturbance: true` and `agfertflag: 1` |
 | `varmap` | `<model variable>: <variable name in your dataset>`; the model name is tried first |
-| `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
+| `horizontal_resolution`, `lon_min` to `lat_max`, `regrid_method`, `land_fraction_min` | model grid and regridding (`box_mean`, `bilinear`, `nearest`) |
 | `start_year`, `run_length`, `run_length_units` | first year and duration, in any unit from seconds to years |
 | `run_dt`, `run_dt_units` | model step: one month or whole days |
 | `cmntecd`, `vegecd`, ... | parameter files, by default `{tem_src}/params/gdstem/` |
