@@ -36,6 +36,8 @@ cover file, numbered with the tcomm45_lulc.yaml of that set; every other case us
          srun --kill-on-bad-exit=1; the model writes tem_<id>.out (progress) and tem_<id>.log (all other messages, srun messages too); the id is set here with TEM_RUN_ID.
 20241111 Changed: repository XTEM; the land cover is numbered with the tcomm45_lulc.yaml of the parameter set; fire is the GDSTEM-FIRE
          model (gdp_file, params/gdstem_fire; fire_seed and fire_mode, competition and wood_pools are gone); --gdp added.
+20241112 Fixed: the driver output goes to cases/<name>/driver.log and the job log, and summary.yaml names the reason of a failed driver (note).
+20241112 Changed: a case whose OUTPUT/tem.nc has no values or an implausible GPP fails (rc 3) instead of passing with rc 0.
 """
 
 import argparse
@@ -432,12 +434,24 @@ def run_case(
     (case / "run_config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
     app = work / "repos" / "TEM_UW_APP"
     start = time.time()
+    drv = case / "driver.log"  # kept in the archive; also shown here, the job log
     rc = sh(
         [sys.executable, str(app / "src" / "driver.py")],
         cwd=case,
+        log=drv,
         env={"TEM_UW_APP_ROOT": str(app), "PYTHONPATH": str(app / "src")},
     )
-    bad = preflight(case) if rc == 0 else ""
+    drv_text = drv.read_text() if drv.exists() else ""
+    print(drv_text, end="", flush=True)
+    if rc:  # the note of summary.yaml names the reason (the last line of the traceback)
+        last = [x for x in drv_text.splitlines() if x.strip()]
+        return {
+            "case": name,
+            "rc": rc,
+            "minutes": (time.time() - start) / 60,
+            "note": ("driver: " + last[-1])[:400] if last else "driver failed",
+        }
+    bad = preflight(case)
     if bad:
         return {"case": name, "rc": 2, "minutes": (time.time() - start) / 60, "note": "input check: " + bad}
     if rc == 0:
@@ -461,6 +475,11 @@ def run_case(
             good = v.where(v > -1e5)
             res["valid_cell_cohorts"] = int(good.notnull().any("time").sum())
             res["gpp_max"] = float(good.max())
+            # a run that exits 0 but wrote no values, or values far outside the range of the model (GPP of a month is below 1000 g C m-2),
+            # is a failure of the case, not a pass
+            if res["valid_cell_cohorts"] == 0 or not 0 <= res["gpp_max"] <= 5000:
+                res["rc"] = 3
+                res["note"] = f"implausible output: {res['valid_cell_cohorts']} cell cohorts with values, {OUTVARS[0]} max {res['gpp_max']:g}"
     elif rc == 0:
         res["note"] = "no OUTPUT/tem.nc"
     else:

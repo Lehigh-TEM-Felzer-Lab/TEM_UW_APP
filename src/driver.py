@@ -133,8 +133,9 @@ def regrid_file(
             .sortby("lon")
             .sortby("lat")
         )
-        on_grid = np.isin(lon, ds.lon).all() and np.isin(lat, ds.lat).all()
-        if landcover and not on_grid and tem_regrid.AREA in ds:
+        # The land cover always goes through lulc_to_grid, also when its grid is the model grid: land_fraction_min must remove the cells
+        # that are mostly water or ice, which have no soil, elevation or wind data. Skipping it on an identical grid kept cells with 1% land.
+        if landcover and tem_regrid.AREA in ds:
             return tem_regrid.lulc_to_grid(
                 ds.load(), lon, lat, cfg["horizontal_resolution"], cfg["land_fraction_min"]
             )

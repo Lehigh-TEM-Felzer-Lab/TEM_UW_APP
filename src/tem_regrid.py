@@ -31,14 +31,16 @@ CATEGORICAL = (
 EARTH_KM = 6371.0
 
 
-def _edges(centres: np.ndarray) -> np.ndarray:
+def _edges(centres: np.ndarray, res: float) -> np.ndarray:
+    if centres.size == 1:  # a single source cell has the width of the model cells
+        return np.array([centres[0] - res / 2, centres[0] + res / 2])
     mid = (centres[1:] + centres[:-1]) / 2
     return np.concatenate([[centres[0] - (mid[0] - centres[0])], mid, [centres[-1] + (centres[-1] - mid[-1])]])
 
 
 def share(src: np.ndarray, dst: np.ndarray, res: float, sine: bool = False) -> np.ndarray:
     """(target, source) matrix: the fraction of each source cell that lies in each target cell."""
-    se = _edges(np.asarray(src, float))
+    se = _edges(np.asarray(src, float), res)
     de = np.append(np.asarray(dst, float) - res / 2, dst[-1] + res / 2)
     if sine:
         se, de = (np.sin(np.deg2rad(np.clip(e, -90, 90))) for e in (se, de))
@@ -57,7 +59,7 @@ def lulc_to_grid(ds: xr.Dataset, lon: np.ndarray, lat: np.ndarray, res: float, l
     """The cohorts of ds (cohort, lat, lon; lat and lon increasing) on the model grid. See the module text."""
     if AREA not in ds:
         raise ValueError(f"the land cover needs {AREA} (km2 of each cohort) to be regridded")
-    src_res = float(np.median(np.abs(np.diff(ds.lon.values))))
+    src_res = float(np.median(np.abs(np.diff(ds.lon.values)))) if ds.lon.size > 1 else res
     if src_res > res * 1.01:
         raise ValueError(
             f"the land cover has {src_res:g} degree cells, coarser than the model grid of {res:g}: make the land cover at the model resolution"
@@ -69,7 +71,11 @@ def lulc_to_grid(ds: xr.Dataset, lon: np.ndarray, lat: np.ndarray, res: float, l
         return np.einsum("ij,cjk,lk->cil", wlat, x, wlon, optimize=True)
 
     area = box_sum(a)
-    land = area.sum(0) >= land_fraction_min * cell_area_km2(lon, lat, res)
+    # A mixed potential type is written twice, once per component, each with the full area (lulc.nc: "..._second_component"), so the
+    # second components must not be counted again in the land area of the cell.
+    names = str(ds.cohort.attrs.get("flag_meanings", "")).split()
+    second = np.array([n.endswith("_second_component") for n in names] if len(names) == area.shape[0] else [False] * area.shape[0])
+    land = area[~second].sum(0) >= land_fraction_min * cell_area_km2(lon, lat, res)
     ok = (area > 0) & land[None]
     dims, coords = ("cohort", "lat", "lon"), {"cohort": ds.cohort, "lat": lat, "lon": lon}
     out = {AREA: xr.DataArray(np.where(ok, area, np.nan), dims=dims, coords=coords, attrs=ds[AREA].attrs)}
