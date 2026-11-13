@@ -187,6 +187,16 @@ spinoutyrs: 0 # Number of spin-up years written
 ostateflag: 0 # 0: no state written | 1: at equilibrium | 2: at ostateyear
 ostatefile: ./OUTPUT/temstate.nc # State file written (ranks are merged into it)
 ostateyear: 0 # Year of the state written when ostateflag is 2
+# NetCDF input and output, adapted from fms2_io of FMS (see XTEM netcdf_io.h)
+num_io_buffers: 2 # Tiles of each input kept in memory (-1: whole input once)
+io_buffer_mb: 256 # MiB of one tile (widened to whole file chunks)
+netcdf_read_broadcast: true # Rank 0 reads and broadcasts the check of the inputs (false: every rank reads)
+use_netcdf_mpi: false # HDF5 MPI-IO reads of the inputs; needs make NETCDF_PAR=1
+use_collective: false # With use_netcdf_mpi: collective reads in the check of the inputs
+ncchksz: 65536 # Bytes, nc__open buffer hint (classic files only)
+header_buffer_val: 16384 # Bytes of free header space in output and state files
+deflate_level: 2 # Compression of the output variables, 0 to 9
+shuffle: true # Shuffle filter of the output variables
 
 # -----------------------------------------------------------------------------
 # 10. PARAMETER AND SITE FILES

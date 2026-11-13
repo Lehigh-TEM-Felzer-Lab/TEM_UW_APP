@@ -5,7 +5,7 @@
     python run_test.py --only daily
     python run_test.py --mock-era5 --all   # synthetic forcing, no CDS account needed
 
-Two cases are tested: monthly (equilibrium and one transient year) and daily (365 daily steps, hours long). Restart, fire and the
+Two cases are tested: monthly (equilibrium and one transient year) and daily (7 daily steps after a 1 year spin-up, minutes long). Restart, fire and the
 sensitivity variants of earlier versions (solver, spin-up, process switches, agriculture) are left out: they exercise switches,
 not the workflow.
 
@@ -17,7 +17,8 @@ TEM_UW_APP env.yaml plus cdsapi (a ~/.cdsapirc for the Climate Data Store; not n
 every command.
 
 Climate is ERA5 daily statistics of one year, downloaded by src/gen_climate_inputs.py (CDS dataset derived-era5-single-levels-daily-statistics). The monthly
-case aggregates it to months, the daily case runs the 365 days of that year (set run_length: 7 with run_length_units: days to stop after a week).
+case aggregates it to months, the daily case runs the first 7 days of that year after a 1 year spin-up, which tests the workflow and not the equilibrium (DAILY sets run_length, run_length_units and equil_*;
+use run_length: 365 with run_length_units: days and the EQUIL years for a full year).
 With --mock-era5, xarray writes deterministic synthetic forcing to downloads/era5_mock/climate_era5.nc, with the variables and the
 daily coverage of the downloaded input; it tests the workflow and the fluxes are not realistic.
 Every other input is made by src/gen_static_inputs.py from its source: CO2 (NOAA), soil (SoilGrids), elevation (ETOPO),
@@ -37,6 +38,7 @@ cover file, numbered with the tcomm45_lulc.yaml of that set; every other case us
 20241111 Changed: repository XTEM; the land cover is numbered with the tcomm45_lulc.yaml of the parameter set; fire is the GDSTEM-FIRE
          model (gdp_file, params/gdstem_fire; fire_seed and fire_mode, competition and wood_pools are gone); --gdp added.
 20241112 Fixed: the driver output goes to cases/<name>/driver.log and the job log, and summary.yaml names the reason of a failed driver (note).
+20241113 Fixed: a case that is cancelled gets a row in summary.yaml (rc -15); the daily case runs 7 days after a 1 year spin-up (DAILY).
 20241112 Changed: a case whose OUTPUT/tem.nc has no values or an implausible GPP fails (rc 3) instead of passing with rc 0.
 """
 
@@ -77,11 +79,19 @@ EQUIL = {
     "equil_tau_years": 100.0,
     "equil_min_years": 100,
     "equil_max_years": 300,
-}  # daily cases and --fast
+}  # --fast
+DAILY = {
+    "run_dt_units": "day",
+    "run_length": 7,
+    "run_length_units": "days",
+    "equil_tau_years": 1.0,
+    "equil_min_years": 1,
+    "equil_max_years": 1,
+}  # a week of daily steps after the shortest spin-up: the workflow, not the equilibrium
 # name -> (flag, overrides of run_config.yaml); "needs" is a case that runs first, "fire" adds the fire inputs and params/gdstem_fire
 CASES = {
     "monthly": ("", {}),
-    "daily": ("daily", {"run_dt_units": "day", **EQUIL}),
+    "daily": ("daily", DAILY),
 }
 FLAGS = sorted({v[0] for v in CASES.values() if v[0]})
 SETS = ("gdstem", "gdstem_fire")  # parameter sets used by the cases
@@ -456,7 +466,7 @@ def run_case(
         return {"case": name, "rc": 2, "minutes": (time.time() - start) / 60, "note": "input check: " + bad}
     if rc == 0:
         (case / "OUTPUT").mkdir(exist_ok=True)
-        for stale in (case / "OUTPUT").glob("tem.nc*"):
+        for stale in (case / "OUTPUT").glob("tem*.nc*"):
             stale.unlink()
         runid = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
         rc = sh(
@@ -589,6 +599,8 @@ def main() -> int:
     sets = {"gdstem_fire" if CASES[n][1].get("fire") else "gdstem" for n in names}
     signal.signal(signal.SIGTERM, lambda *_: sys.exit("SIGTERM: archiving what exists"))
     rows: list[dict] = []
+    current = ""  # the case that is running, for the summary of a job that is cancelled
+    began = time.time()
     try:
         clone(work)
         if not a.skip_build:
@@ -597,10 +609,22 @@ def main() -> int:
         data = static_data(work, a, sets)
         for n in names:
             say(f"case {n}")
+            current, began = n, time.time()
             rows.append(run_case(n, work, climate, data, a, a.ncpu))
+            current = ""
             say(str(rows[-1]))
             (work / "summary.yaml").write_text(yaml.safe_dump(rows, sort_keys=False))
     finally:
+        if current:  # cancelled (SIGTERM, scancel) or failed inside a case: the summary says which and when
+            rows.append(
+                {
+                    "case": current,
+                    "rc": -15,
+                    "minutes": (time.time() - began) / 60,
+                    "note": "interrupted before the case finished",
+                }
+            )
+            (work / "summary.yaml").write_text(yaml.safe_dump(rows, sort_keys=False))
         archive(work, a.keep_inputs)
     return int(any(r["rc"] and not r["note"].startswith("skipped") for r in rows))
 

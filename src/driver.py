@@ -64,6 +64,9 @@ def save(ds: xr.Dataset, path: Path) -> set[str]:
     enc = {}
     for name, var in ds.data_vars.items():
         enc[name] = {"zlib": True, "complevel": 4}
+        if "lon" in var.dims:  # the model reads one longitude column at a time
+            dims = zip(var.dims, var.shape, strict=True)
+            enc[name]["chunksizes"] = tuple(1 if d == "lon" else n for d, n in dims)
         if name in INT_VARS:
             ds[name] = var.fillna(INT_FILL).astype("int64")
             enc[name]["_FillValue"] = np.int64(INT_FILL)
