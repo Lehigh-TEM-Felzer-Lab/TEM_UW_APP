@@ -150,6 +150,7 @@ ntol: 20.0 # Tolerance of the nitrogen cycle
 inittol: 0.01 # Proportional tolerance of the integrator
 maxit: 20 # Iterations of the integrator per month
 maxitmon: 200 # Times maxit can be reached in a month
+ode_dtmax: 0 # Largest integrator sub-step, fraction of the model step (0: automatic, 0.03333 for steps of a week or longer and 0.25 for shorter steps; larger is faster, results change within inittol)
 istateflag: 0 # 0: initialize | 1: read the state at equilibrium | 2: read the state of istateyear
 istatefile: ./OUTPUT/temstate.nc # State file read
 istateyear: 0 # Year of the state read when istateflag is 2
@@ -196,6 +197,7 @@ use_collective: false # With use_netcdf_mpi: collective reads in the check of th
 ncchksz: 65536 # Bytes, nc__open buffer hint (classic files only)
 header_buffer_val: 16384 # Bytes of free header space in output and state files
 deflate_level: 2 # Compression of the output variables, 0 to 9
+output_chunk_lonlat: 16 # Lon and lat chunk of the output variables, all time steps per chunk; 0: NetCDF chooses (slow for cell-by-cell writes)
 shuffle: true # Shuffle filter of the output variables
 
 # -----------------------------------------------------------------------------
