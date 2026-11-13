@@ -117,7 +117,7 @@ xto3flag: 0 # 1: transient ozone | 0: long-term average
 xtndepflag: 0 # 1: transient N deposition | 0: long-term average
 xtws10flag: 0 # 1: transient wind | 0: long-term average
 xnfertflag: 1 # 1: annual input without time (long-term average) | 2: transient input
-tlulcflag: 0 # 1: transient land use
+tlulcflag: 0 # 1: transient land use (the lulc input needs a time axis)
 initco2: 286.596 # ppmv at the start
 xco2level: 286.596 # ppmv of the equilibrium
 
