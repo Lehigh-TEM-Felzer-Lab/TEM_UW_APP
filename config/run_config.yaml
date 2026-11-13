@@ -186,7 +186,7 @@ output_new_file_freq_units: year
 spinoutflag: 0 # 1: also write the spin-up years
 spinoutyrs: 0 # Number of spin-up years written
 ostateflag: 0 # 0: no state written | 1: at equilibrium | 2: at ostateyear
-ostatefile: ./OUTPUT/temstate.nc # State file written (ranks are merged into it)
+ostatefile: ./OUTPUT/temstate.nc # State file written (rank 0 writes the one file)
 ostateyear: 0 # Year of the state written when ostateflag is 2
 # NetCDF input and output, adapted from fms2_io of FMS (see XTEM netcdf_io.h)
 num_io_buffers: 2 # Tiles of each input kept in memory (-1: whole input once)
