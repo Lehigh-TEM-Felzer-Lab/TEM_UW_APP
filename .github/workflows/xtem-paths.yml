@@ -1,0 +1,24 @@
+# The documentation and comments name XTEM source files (src/physics, src/io, src/driver). This fails when one of
+# them no longer exists in XTEM main, as happened with tem_core/xtem45.cpp.
+name: xtem-paths
+on:
+  pull_request:
+  schedule:
+    - cron: "53 6 * * 1"
+  workflow_dispatch:
+jobs:
+  paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Lehigh-TEM-Felzer-Lab/XTEM
+          path: xtem
+      - name: Referenced files exist
+        run: |
+          missing=0
+          for f in $(grep -rhoE 'src/(physics|io|driver)/[A-Za-z0-9_]+\.[a-z]+' --include='*.md' --include='*.py' . --exclude-dir=xtem --exclude-dir=.git | sort -u); do
+            [ -e "xtem/$f" ] || { echo "not in XTEM: $f"; missing=1; }
+          done
+          exit $missing

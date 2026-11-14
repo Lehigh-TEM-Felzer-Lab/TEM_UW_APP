@@ -47,7 +47,7 @@ The files for nitrogen fertilizer and for yearly land-cover change are not gener
 
 ## What the model needs from the files
 
-All files of a run must be on the same grid (the same `lon` and `lat` values, so the same resolution) and every file with a time axis must start in `clmstartyr`, be regular at the model step, a month or a year, and cover the run; `time` carries CF units (`days since ...`, `noleap`, `365_day` or `standard` calendar). XTEM checks this at load and stops with the file and the values that differ (`tem_core/tem_input_check.cpp`), so use one `--bbox` and one `--res` for every step. A cell runs where `lulc.nc` has a cohort and, if a `mask` is mapped in `varmap`, where the mask is above 0; every other input must have data there. The fire files below are needed only with `veg_fire: 1`, and `gdp.nc` and `crop.nc` only for the GDSTEM-FIRE terms.
+All files of a run must be on the same grid (the same `lon` and `lat` values, so the same resolution) and every file with a time axis must start in `clmstartyr`, be regular at the model step, a month or a year, and cover the run; `time` carries CF units (`days since ...`, `noleap`, `365_day` or `standard` calendar). XTEM checks this at load and stops with the file and the values that differ (`src/io/tem_input_check.cpp`), so use one `--bbox` and one `--res` for every step. A cell runs where `lulc.nc` has a cohort and, if a `mask` is mapped in `varmap`, where the mask is above 0; every other input must have data there. The fire files below are needed only with `veg_fire: 1`, and `gdp.nc` and `crop.nc` only for the GDSTEM-FIRE terms.
 
 ## Fire inputs
 
@@ -135,7 +135,7 @@ The savanna rule, the crosswalk and the age of secondary stands are assumptions 
 Tillage, disturbance and land-cover change in time are not written, so a run uses `tlulcflag: 0`.
 
 `lulc.nc` has `cohort` as dimension and as int64 coordinate; `lat` and `lon` are float32, categorical fields int64 with `_FillValue -9999`, other fields float32.
-The layouts of all files are in `docs/io_structure.md` of XTEM.
+The layouts of all files are in the section File layouts of `technical_desc.md` of XTEM.
 
 ## References
 

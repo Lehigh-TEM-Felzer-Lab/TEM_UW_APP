@@ -8,7 +8,7 @@ Prepares and runs cases of [XTEM](https://github.com/Lehigh-TEM-Felzer-Lab/XTEM)
 |---|---|
 | `case_submit.sh` | entry point, run from the case directory |
 | `config/run_config.yaml` | all keys, defaults and comments |
-| `src/driver.py`, `tem_climate.py`, `tem_config.py` | case builder: regridding, units, `tem_config.yaml` |
+| `src/driver.py`, `tem_climate.py`, `tem_config.py`, `tem_regrid.py`, `time_units.py` | case builder: regridding, units, `tem_config.yaml` |
 | `src/gen_climate_inputs.py` | downloads ERA5, gridMET, MACA or CMIP6 forcing |
 | `src/gen_static_inputs.py` | builds `co2.nc`, `static.nc`, `lulc.nc`, `flash.nc`, `popdens.nc` and other static inputs |
 | `launchers/` | local and SLURM launchers |
@@ -17,6 +17,16 @@ Prepares and runs cases of [XTEM](https://github.com/Lehigh-TEM-Felzer-Lab/XTEM)
 | `technical_desc.md` | sources of the input data and how they are built |
 | `config_desc.md` | `run_config.yaml` key reference |
 | `flowchart.md` | call hierarchy of the app |
+
+## Related repositories
+
+| Repository | Role |
+|---|---|
+| [XTEM](https://github.com/Lehigh-TEM-Felzer-Lab/XTEM) | the model. Sources are in `src/physics` (science), `src/io` (files, MPI, log) and `src/driver` (main program) |
+| [GDSTEM](https://github.com/Lehigh-TEM-Felzer-Lab/GDSTEM) | the reference of the model science; XTEM carries its changes over (XML and text input and output) |
+| [TEM_Biogeography](https://github.com/Lehigh-TEM-Felzer-Lab/TEM_Biogeography) | potential vegetation workflow; holds a copy of the XTEM sources and the case builder of this repository |
+
+This repository has no model code. The files it names in XTEM are checked weekly by `.github/workflows/xtem-paths.yml`.
 
 ## Setup
 
